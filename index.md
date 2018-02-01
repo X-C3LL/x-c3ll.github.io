@@ -1,2 +1,4 @@
-adfasdf
-.
+---
+layout: default
+---
+TEST
