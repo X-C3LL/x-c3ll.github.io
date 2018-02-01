@@ -23,5 +23,5 @@ facebook:
 github: 
 google:
 
-# Build settings
+# Build setting
 permalink: /:categories/:title/
