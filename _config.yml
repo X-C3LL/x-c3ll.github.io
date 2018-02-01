@@ -25,4 +25,5 @@ google:
 
 # Build setting
 permalink: /:categories/:title/
-source: ./
+source: /
+markdown: kramdown
