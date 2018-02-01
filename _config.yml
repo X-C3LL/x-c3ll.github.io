@@ -1,7 +1,7 @@
 # Site specific settings
 title: "X-C3LL's Notebook"
 name: "X-C3LL's Notebook"
-keywords: "RedTeam, Hacking, Infosec, pentest"
+keywords: "RedTeam, Hacking, Infosec, pentest, security"
 baseurl: "/"
 url: "https://x-c3ll.github.io/"
 description: "A DoomsDay Vault to preserve some thoughts about Red Teaming :)"
