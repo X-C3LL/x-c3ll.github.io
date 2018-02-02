@@ -1,10 +1,10 @@
 # Site specific settings
-title: "X-C3LL's Notebook"
-name: "X-C3LL's Notebook"
+title: "DoomsDay Vault"
+name: "DoomsDay Vault"
 keywords: "RedTeam, Hacking, Infosec, pentest, security"
-baseurl: "/"
+baseurl: ""
 url: "https://x-c3ll.github.io/"
-description: "A DoomsDay Vault to preserve some thoughts about Red Teaming :)"
+description: "Just a blog  to preserve some thoughts about Red Teaming :)"
 cover: "/assets/img/cover.svg"
 fanpage_id: ""
 
@@ -26,3 +26,7 @@ google:
 # Build setting
 permalink: /:categories/:title/
 markdown: kramdown
+
+kramdown:
+  input: GFM
+  syntax_highlighter: rouge
