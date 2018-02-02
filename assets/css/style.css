@@ -1,0 +1,58 @@
+@import url('https://fonts.googleapis.com/css?family=Quantico|Roboto');
+
+body {
+	background-color: rgba(0,0,0,0.97);
+	color: rgba(255,255,255,0.7);
+	padding: 5px;
+	margin: auto;
+	width: 80%;
+	border: 1px dashed rgba(255,255,255,0.7);
+	font-family: "Roboto";
+}
+
+hr {
+    border: 1px dashed rgba(255,255,255,0.7);
+}
+
+nav {
+    text-align: center;
+    margin: 15px;
+    border-bottom: 1px dashed rgba(255,255,255,0.5);
+    border-top: 1px dashed rgba(255,255,255,0.5);
+}
+nav ul {
+	display: block;
+	padding: 0;
+}
+
+nav ul li {
+	display: inline;
+	padding-left: 10px;
+}
+
+nav ul li a {
+	text-decoration: none;
+	color: rgba(255,255,255,1);
+}
+
+nav ul li a:hover {
+	font-weight: bold;
+}
+
+a {
+	color: darkorange;
+}
+
+h1 {
+	color: gold;
+	font-family: Quantico;
+}
+h2 {
+	color: coral;
+	font-family: Quantico;
+}
+
+strong {
+	color: orangered;
+}
+
