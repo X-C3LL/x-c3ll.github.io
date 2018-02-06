@@ -228,7 +228,7 @@ $ ./poc
 
 ## Final words
 
-I hope this trick can be useful for you. Maybe I made some typos or minor errors, feel free to ping me at twitter [@TheXC3LL](https.//twitter.com/TheXC3LL).
+I hope this trick can be useful for you. Maybe I made some typos or minor errors, feel free to ping me at twitter [@TheXC3LL](https://twitter.com/TheXC3LL).
 
 Byt3z! 
 
