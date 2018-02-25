@@ -209,7 +209,7 @@ Let's inject our code and modify registers (it is x86_64, so RAX must be the add
     
     // Now we need to follow the call convention so:
     // - RAX => must be the address of remote dlopen()
-    // - RDI => address where "/tmp/inject.so" string lies (first dlopen parameter)
+    // - RDI => address where "/dev/shm/ko.so" string lies (first dlopen parameter)
     // - RSI => RTLD_LAZY value -2- (second dlopen parameter)
     regs.rax = dlopen_addr(pid);
     regs.rdi = code_cave_address;
