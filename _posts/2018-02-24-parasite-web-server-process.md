@@ -115,12 +115,12 @@ void infector(pid_t pid) {
         exit(-1);
     }
 
-    // Oldregs is our backup, and regs will by a copy to edit
+    // Oldregs is our backup, and regs will be a copy to edit
     memcpy(&regs, &oldregs, sizeof(struct user_regs_struct));
 
 ```
 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-We need to locate a region of memory in the remote process where we can put our code stub. To accomplish this mission we can retrieve the address reading /proc/$PID/maps and searching for a r-x region.
+We need to locate a memory region in the remote process to write our code stub. To accomplish this mission we can retrieve an address by reading /proc/$PID/maps and searching for a r-x region.
 
 ```c
 // Find a region for our code cave
@@ -182,7 +182,7 @@ void ptraceWrite(int pid, unsigned long long addr, void *data, int len) {
 }
 ```
 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-So with all of this code we can: search for a r-x region, read memory and write memory. That is nice!. We want to write our stub in an address where is probably there is another code, so it __is really important to backup this region__ before insert our code. After our code is executed, we are going to restore it's original content. So do the backup:
+So, with all this code, we can: search for a r-x region, read memory and write memory. That is nice!. Have in mind that we will overwrite already-existing code in that memory region, so it __is really important before insert our code__. After our code is executed, we are going to restore it's original content. So do the backup:
 
 ```c
 	// Find a memory region with executable perms
