@@ -14,7 +14,7 @@ authors:
 Some time ago in a Red Team operation I bypassed an uploader and deployed a little webshell. I had to bypass disable_functions and open_basedir using the trick that I explained [in this article](https://www.tarlogic.com/en/blog/how-to-bypass-disable_functions-and-open_basedir/) (and I released a tool called [Chankro](https://github.com/TarlogicSecurity/Chankro) to automate this process). Before continuing reading this article, please read and understand how the bypass of disable_functions works because we are going to rely on it to perform this attack later.
 
 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-After few minutes looking for juiciy files with passwords or configurations in the compromised server I found something really interesting: a configuration script with these lines inside:
+After few minutes looking for juicy files with passwords or configurations in the compromised server I found something really interesting: a configuration script with these lines inside:
 
 ```bash
 ...
@@ -68,7 +68,7 @@ uid_t geteuid() {
 
 ```
 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-If we check the libs loaded by an Apache process we can notice that libdl is loaded:
+If we check the libs loaded by an Apache process we can notice that libdl is already loaded:
 
 ```
 gidorah@kaiju:~|⇒  sudo cat /proc/15922/maps | grep libdl
@@ -78,7 +78,7 @@ gidorah@kaiju:~|⇒  sudo cat /proc/15922/maps | grep libdl
 7f4b294aa000-7f4b294ab000 rw-p 00003000 08:01 2360320                    /lib/x86_64-linux-gnu/libdl-2.19.so
 ```
 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-That is cool because things are a lot easier. Our plan will be use this stage 1 to inject a little stub of code inside the target process, then change the program counter to point the address of our stub. Our stub will be just a call to dlopen() with our stage 2 and RLTD_LAZY as params (as libdl is loaded, we only need to recalculate the address of dlopen becuase of ASLR).
+That is cool because things will be much easier. Our plan will be use this stage 1 to inject a little stub of code inside the target process, then change the program counter to point the address of our stub. Our stub will be just a call to dlopen() with our stage 2 and RLTD_LAZY as params (as libdl is loaded, we only need to recalculate the address of dlopen because of ASLR).
 
 ```c
 //Stub
@@ -196,7 +196,7 @@ So with all of this code we can: search for a r-x region, read memory and write 
     ptraceRead(pid, code_cave_address, oldcode, CAVE_SIZE);
 ```
 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-Let's inject our code and modify registers (it is x86_64, so RAX must be the address of dlopen, RDI the location of our stage 2 and RSI the value of RTLD_LAZY). Of course we put RIP pointing to our stub (__injectme()__), so when the exeuction will be resumed our code will be executed:
+Let's inject our code and modify registers (it is x86_64, so RAX must be the address of dlopen, RDI the location of our stage 2 and RSI the value of RTLD_LAZY). Of course we put RIP pointing to our stub (__injectme()__), so when the execution will be resumed our code will be executed:
 
 ```c
 // Now is time to overwrite the code cave with our code   
@@ -303,7 +303,7 @@ www-data  15922  0.0  0.8 284892 16532 ?        S    13:07   0:00 /usr/sbin/apac
 ```
 ## PoC || GTFO
 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-This is just a proof of concept, so do not use it in production servers or in real operations. Learn the technique and then use it carefully. Of course __everything here is based in a particular enviroment where ptrace_scope is 0 and suid_dumpable is set to 1__. That is not a default situation.
+This is just a proof of concept, so do not use it in production servers or in real operations. Learn the technique and then use it carefully. Of course __everything here is based in a particular environment where ptrace_scope is 0 and suid_dumpable is set to 1__. That is not a default situation.
 
 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
 I put here the 3 stages to let you test it and play a bit in local. The __stage 1__ will try to contact the TCP port 8880 to download the __stage 2__. This was designed like a binary before thinking it as a shared object, so it has tons of fprintf() as debug.
