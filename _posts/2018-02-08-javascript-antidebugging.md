@@ -431,7 +431,7 @@ VM104:1 Uncaught ReferenceError: global is not defined
      ...
 ```
 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-We can search for tons of metada that exists only in a browser. Some ideas of this kind that we can retrieve can be seen in the [Panopticlick Project](https://panopticlick.eff.org).
+We can search for tons of metadata that exists only in a browser. Some ideas of this kind that we can retrieve can be seen in the [Panopticlick Project](https://panopticlick.eff.org).
 
 
 ## 0x08 WebGL
