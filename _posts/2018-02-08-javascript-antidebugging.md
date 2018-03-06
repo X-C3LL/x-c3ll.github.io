@@ -267,7 +267,7 @@ At the end of section "0x01 Function redefinitions" we mentioned that we can ret
 The less efective way to do it is to calculate the hash of functions or code blocks and compare it with a pre-known table. But this approach is really stupid. A more realistic and efective approach can be repeat the same strategy that we used before with the stack traces. We can calculate the hash of a chunk of code and use it as a key to decrypt other blocks of code.
 
 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-The most beautiful idea in order to create an implicit integrity control is to use __collisions in md5__. This idea was coined by [@cgvwzq](https://twitter.com/cgvwzq) after few beers last summer. Basicly we can create functions where its own md5 is tested inside the own function. In order to perform the check __inside the function__ we need to play with collisions (we wants to create something like `function(){ if (md5(arguments.callee.toString() === '<md5>') code_function; }`.
+The most beautiful idea in order to create an implicit integrity control is to use __collisions in md5__. This idea was coined by [@cgvwzq](https://twitter.com/cgvwzq) after few beers last summer. Basicly we can create functions where its own md5 is tested inside the own function. In order to perform the check __inside the function__ we need to play with collisions (we want to create something like `function(){ if (md5(arguments.callee.toString() === '<md5>') code_function; }`.
 
 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
 The concept behind this technique is the same used to generate image files wich md5 checksum is shown in the own picture. Here is an classic example: a gif showing his own md5 checksum.
