@@ -373,7 +373,7 @@ Now our detection will fail:
 
 ## 0x07 Restrictional enviroments
 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-As we stated in the introduction, one of the things that we wants is to try to detect if the code is being executed inside the right enviroment. What we call "the right enviroment" is:
+As we stated in the introduction, one of the things that we want is to try to detect if the code is being executed inside the right enviroment. What we call "the right enviroment" is:
 
 - The code is being executed in a browser (not an emulator, not NodeJS, ...)
 - The code is being executed in the domain / resource destinated to it (not a local server)
