@@ -1,7 +1,7 @@
 ---
 layout: post
 title: Defeating WordPress Security Plugins (Revisited)
-date: 2018-03-10 12:00:00
+date: 2018-03-09 12:00:00
 categories: posts
 en: true
 description: Article about how to subvert file integrity checks made by most popular WordPress Plugins 
