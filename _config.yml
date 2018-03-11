@@ -15,7 +15,7 @@ ssl: false # It will redirect to http
 # Media
 # Just the shortname:
 # facebook: lampiaosec # Rigth
-# facebook: facebook.com/lampiaosec # Wrong
+# facebook: facebook.com/lampiaosec #  Wrong
 
 
 twitter: TheXC3LL
