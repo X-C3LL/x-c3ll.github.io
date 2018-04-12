@@ -4,6 +4,11 @@ layout: default
 permalink: cves.html
 ---
 
+
+# 2018
+
+:: [CVE-2018-10024](https://cve.mitre.org/cgi-bin/cvename.cgi?name=CVE-2018-10024) :: Ubiquoss Switch :: <br/>
+
 # 2017
 
 :: [CVE-2017-13704](https://cve.mitre.org/cgi-bin/cvename.cgi?name=CVE-2017-13704) :: Dnsmasq :: (Credits to Javier Gil [@ca0s_](https://twitter.com/ca0s_))<br/>
