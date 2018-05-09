@@ -12,7 +12,7 @@ authors:
 
 
 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-Something that boils me since few years ago is the fashion of using "pty.spawn" and similar tricks to get a pseudoterminal. You does not always have python installed in the machine that you just compromised, so if you are going to drop a custom binary in that machine there is no reason to not to do the things "well". Without a pty, stuff like doing a ssh to other server, using sudo, vim, etc. is a pain in the ass. Of course there are tons of tricks to avoid this issues, but it is far better if we can avoid to use external help when we just can run a child process inside a pty just editing few lines. In this post we are going to edit a well-known tool [DNSCat2](https://github.com/iagox86/dnscat2) in order to obtain a shell inside a pty.
+Something that boils me since few years ago is the fashion of using "pty.spawn" and similar tricks to get a pseudoterminal. You does not always have python installed in the machine that you just compromised, so if you are going to drop a custom binary in that machine there is no reason to not to do the things "well". Without a pty, stuff like doing a ssh to other server, using sudo, vim, etc. is a pain in the ass. Of course there are tons of tricks to solve this issues, but it is far better if we can avoid to use external help. We can run a child process inside a pseudoterminal just editing few lines. In this post we are going to edit a well-known tool [DNSCat2](https://github.com/iagox86/dnscat2) in order to obtain a shell inside a pty.
 
 
 ## From fork() to forkpty()
