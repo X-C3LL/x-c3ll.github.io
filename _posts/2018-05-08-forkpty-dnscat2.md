@@ -59,6 +59,7 @@ So if we use forkpty(), when we do our execlp("/bin/sh"...) the shell process wi
 ## Improving DNScat2
 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
 It is the moment to put our hands dirty. Download the code from github (https://github.com/iagox86/dnscat2/ ) and vim the file __client/drivers/driver_exe.c__.
+
 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
 First we are going to add the includes needed:
 
@@ -71,7 +72,7 @@ First we are going to add the includes needed:
 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
 Search the line `driver->pid = fork();` and edit it to use forkpty() (the original code is commented):
 
-```
+```c
 /*driver->pid = fork();*/  
    int terminalfd; // We are going to read & write to our child through it
 
