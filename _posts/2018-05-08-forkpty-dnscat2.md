@@ -60,7 +60,7 @@ So if we use forkpty(), when we do our execlp("/bin/sh"...) the shell process wi
 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
 It is the moment to put our hands dirty. Download the code from github (https://github.com/iagox86/dnscat2/ ) and vim the file __client/drivers/driver_exe.c__.
 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-1. First we are going to add the includes needed:
+First we are going to add the includes needed:
 
 ```c
 ...
@@ -69,7 +69,7 @@ It is the moment to put our hands dirty. Download the code from github (https://
 ...
 ```
 
-2. Search the line `driver->pid = fork();` and edit it to use forkpty() (the original code is commented):
+Search the line `driver->pid = fork();` and edit it to use forkpty() (the original code is commented):
 
 ```
 /*driver->pid = fork();*/  
@@ -104,7 +104,7 @@ LOG_FATAL("exec: execlp failed (%d)", errno);
 exit(1);
    }  
 ```
-3. We need to add our "terminalfd" to the "driver" structure:
+We need to add our "terminalfd" to the "driver" structure:
 
 ```c
 /* Add the sub-process's stdout as a socket. */      
@@ -128,8 +128,10 @@ exit(1);
    select_set_closed(driver->group,       driver->pipe_stdout[PIPE_READ], exec_closed_callback);     
 ```
 
-4. Lastly we need to add the flags -static (if we want a static compilation just ready to work when it is dropped in a compromised machine) and -lutil to link the libraries needed.
-5. `make`. Et voilà!
+Lastly we need to add the flags -static (if we want a static compilation just ready to work when it is dropped in a compromised machine) and -lutil to link the libraries needed.
+
+ `make`. Et voilà!
+ 
 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
 When we try to ssh other server using the original version (just download from github and compile), we see the next error message:
 ```
