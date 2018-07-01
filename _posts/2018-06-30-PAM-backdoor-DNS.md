@@ -15,7 +15,7 @@ Probably one of the most well-known post-explotation techniques used in pentests
 
 
 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-An interesting twist is to mix up this technique with the classic DNS exfiltration, so we can send the credentials to our C&C without worry about firewalls and traffic rules. We only need to send a DNS request to the DNS server by the machine, then it will be forwarded to other DNS servers, and at some point the request will hit our Authoritative DNS Server. So we can retrieve silently credentials using this well-known covert channel.
+An interesting twist is to mix up this technique with the classic DNS exfiltration, so we can send the credentials to our C&C without worry about firewalls and traffic rules. We only need to send a DNS request to the DNS server used by the machine, then it will be forwarded to other DNS servers, and at some point the request will hit our Authoritative DNS Server. So we can retrieve silently credentials using this well-known covert channel.
 
 
 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
