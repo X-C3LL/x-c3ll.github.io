@@ -545,7 +545,7 @@ int pam_get_item(const pam_handle_t *pamh, int item_type, const void **item) {
 Compile (`gcc pam_fucked.c -shared -fPIC pam_fucked.so`), stop the SSH daemon and relaunch it with LD_PRELOAD=/../module/location.../.
 
 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-The use of LD_PRELOAD has few negative side effects, like the needed of restart the daemon, so it can generate other kind of events that can alert the Blue Team. In the other hand, if you are going to restart a critical service as SSH you must operate from a point outside of SSH (maybe a reverse shell) and keep an eye to avoid to terminate the current sessions __:)__.
+The use of LD_PRELOAD has few negative side effects, like the needed of restart the daemon, so it can generate other kind of events that can alert the Blue Team. In the other hand, if you are going to restart a critical service as SSH you must operate from a point outside of SSH (maybe a reverse shell) and keep an eye to avoid terminating  the current sessions __:)__.
 
 
 ## 0x03 Communcation with C&C
