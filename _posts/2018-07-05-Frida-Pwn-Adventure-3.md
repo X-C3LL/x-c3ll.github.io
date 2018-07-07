@@ -445,17 +445,18 @@ mothra@kaiju:~/holydays|⇒  gdb -p  $(pidof PwnAdventure3-Linux-Shipping) --bat
 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
 Hook it...
 ```javascript
-         // Mana 
-         var getMana = Module.findExportByName("libGameLogic.so", "_ZN6Player7GetManaEv");
-         console.log("Player::GetMana at address: " + useMana);
-         Interceptor.attach(useMana,
-         {
-             onLeave: function (retval) {
-                 console.log("[LOG] Mana: " + retval);
-             }
-         }
-
-         );
+        var getMana = Module.findExportByName("libGameLogic.so", "_ZN6Player7GetManaEv");
+        console.log("Player::GetMana at address: " + getMana);
+        Interceptor.attach(getMana,
+        {
+            onEnter: function (args) {
+                if (cheatStatus.infiniteMana == 1) {
+                    m_manaAddr = ptr(args[0]).add(544) // Offset m_mana
+                    Memory.writeInt(m_manaAddr, 100);
+                }
+            }
+        }
+        );
  ```
  &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
 Keep pressed the fire button and check how your mana never get low!
