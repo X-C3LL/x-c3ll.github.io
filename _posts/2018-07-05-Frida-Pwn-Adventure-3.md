@@ -422,6 +422,9 @@ The allocation is easily made calling __Memory.alloc(SIZE)__. Then with __Memory
 ## 0x04 Manna is falling from the sky
 
 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+__UPDATE (8/JUL/2018): The mana is getting checked via server, so I failed hard here. I got tricked because we are only setting the value in the HUD :(__
+
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
 If you walk to the direction of the sun (over the sea) at some point you will find a island with Cows and a quest will be activated. Without making any big spoiler, in this island an NPC will give you a weapon. This weapon wastes mana, and we do not like to waste it (even if it is regenerated fastly). We want our mana always at the max value! 
 
 ```
