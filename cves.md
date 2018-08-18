@@ -6,6 +6,7 @@ permalink: cves.html
 
 
 # 2018
+:: [CVE-2018-15503](https://cve.mitre.org/cgi-bin/cvename.cgi?name=CVE-2018-15503) :: Swoole:: <br />
 :: [CVE-2018-12482](https://cve.mitre.org/cgi-bin/cvename.cgi?name=CVE-2018-12482) :: OCS Inventory:: <br />
 :: [CVE-2018-10024](https://cve.mitre.org/cgi-bin/cvename.cgi?name=CVE-2018-10024) :: Ubiquoss Switch :: <br/>
 
