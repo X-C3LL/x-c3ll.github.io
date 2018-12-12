@@ -11,7 +11,7 @@ authors:
 ---
 
 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-In the past days a vulnerability was discovered in __imap_open__ function ([CVE-2018-19518](https://www.cvedetails.com/cve/cve-2018-19518)). The main issue with this issue is that a local user can abuse this vulnerability to bypass some restrictions in hardened servers, and execute OS commands, because this function usually is allowed. This kind of bypass is similar to the one based in ShellShock: someone can inject OS commands inside functions not banned by disable_functions. I wanted to find a way to discover similar bypasses in an automated way. 
+In the past days a vulnerability was discovered in __imap_open__ function ([CVE-2018-19518](https://www.cvedetails.com/cve/cve-2018-19518)). The main problem with this issue is that a local user can abuse this vulnerability to bypass some restrictions in hardened servers, and execute OS commands, because this function usually is allowed. This kind of bypass is similar to the one based in ShellShock: someone can inject OS commands inside functions not banned by disable_functions. I wanted to find a way to discover similar bypasses in an automated way. 
 
 
 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
@@ -98,7 +98,7 @@ ZEND_PARSE_PARAMETERS_END();
 ```
 
 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-In order to extract the parameters, a shabby (and effective) approach is to compile PHP with symbols and use a script in GDB to parse the information. Of course there are better ways than using GDB, but recently I had to script some helpers for debugging PHP in GDB that fit really well in this other task, so I an not ashamed for reusing them. Let's compile the last PHP version:
+In order to extract the parameters, a shabby (and effective) approach is to compile PHP with symbols and use a script in GDB to parse the information. Of course there are better ways than using GDB, but recently I had to script some helpers for debugging PHP in GDB that fit really well in this other task, so I am not ashamed for reusing them. Let's compile the last PHP version:
 
 ```bash
 cd /tmp
