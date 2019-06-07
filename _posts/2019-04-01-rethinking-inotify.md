@@ -236,4 +236,4 @@ With a simple Curl request (`curl http://localhost/test.php --cookie "PHPSESSID=
 
 ## 0x03 Final words
 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-As I said in the introduction this is a brief article to give you some ideas related with inotify. Probably I gonna edit this post in the future to increase it with more ideas, but If you already have one, feel free to ping me at twitter ([@TheXC3LL](https://twitter.com/TheXC3LL).
+As I said in the introduction this is a brief article to give you some ideas related with inotify. Probably I gonna edit this post in the future to increase it with more ideas, but If you already have one, feel free to ping me at twitter ([@TheXC3LL])(https://twitter.com/TheXC3LL).
