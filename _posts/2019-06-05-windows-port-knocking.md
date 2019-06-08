@@ -489,4 +489,4 @@ COMMAND: 666 - Reverse Shell
 ## 0x02 Conclusions
 
 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-I encourage you to play a bit with the Windows Filtering Platform in order to build defensive and offensive toys. If you find useful this article, or wanna point me to an error or a typo, feel free to contact me at twitter [https://twitter.com/TheXC3LL](@TheXC3LL).
+I encourage you to play a bit with the Windows Filtering Platform in order to build defensive and offensive toys. If you find useful this article, or wanna point me to an error or a typo, feel free to contact me at twitter [@TheXC3LL]([https://twitter.com/TheXC3LL]).
