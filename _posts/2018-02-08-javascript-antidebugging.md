@@ -10,6 +10,9 @@ authors:
     - X-C3LL
 ---
 
+__Disclaimer:__ _This post was updated (Nov 2019)_
+
+
 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
 Last summer I spent a lot of time talking with [@cgvwzq](https://twitter.com/cgvwzq) about antidebugging tricks in JavaScript. We tried to find resources or articles were this topic was analyzed, but the documentation is poor and mostly incomplete. You can find little tricks around the net, but we could not find a resource where all of them were collected. So... here comes our quest.
 
@@ -201,11 +204,11 @@ First run that code without DevTools opened and later open it. As you can see we
 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
 These time checks can be placed at random points inside the code so it will be harder to the analyst to spot them.
 
-## 0x04 DevTools detection (Chrome)
+## 0x04 DevTools detection (I) [Chrome]: getter
 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
 The first time I saw this technique was in this [Reddit Post](https://www.reddit.com/r/firefox/comments/5gtedd/ublock_origin_developer_raymond_hill_on/dav4iiu/). As is said in the post:
 
->_The technique used is to implement a getter on the id property of a div element. When that divelement is sent to the console like console.log(div);, the browser automatically tries to get the id of the element for convenience. Hence, if the getter is executed after calling console.log, this means the console is opened._
+>_The technique used is to implement a getter on the id property of a div element. When that div element is sent to the console like console.log(div);, the browser automatically tries to get the id of the element for convenience. Hence, if the getter is executed after calling console.log, this means the console is opened._
 
 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
 A simple Proof of Concept:
@@ -221,7 +224,18 @@ Object.defineProperty(div, "id", {get: () => {
 }});
 ```
 
-## 0x05 Implicit control of flow integrity
+## 0x05 DevTools detection (II) [Chrome]: size changes
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+If DevTools is opened (unless it was opened as undocked) the difference between __window.outerWidth/Height__ and __window.innerWidth/Height__ will change, so it can be measured in a loop. This trick is used by [Devtools-detect](https://github.com/sindresorhus/devtools-detect):
+
+```javascript
+        const widthThreshold = window.outerWidth - window.innerWidth > threshold;
+        const heightThreshold = window.outerHeight - window.innerHeight > threshold;
+        const orientation = widthThreshold ? 'vertical' : 'horizontal';
+```
+
+
+## 0x06 Implicit control of flow integrity
 
 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
 One of the first steps when we try to deobfuscate a JavaScript snippet is start to rename some variables and functions in order to clarify the source code. You just split the code in smaller chunks of code and begin renaming here and there. In JavaScript we can check if the name of a function has changed or keep the same name. Or to be more correct we can check if the stack trace contains the original names and the original order.
@@ -258,7 +272,7 @@ When you execute this code you will see the string `#test1test2test3test4`. If w
 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
 Keep in mind that this trick needs to be combined with strong obfuscation to be useful.
 
-## 0x06 Implicit control of code integrity
+## 0x07 Implicit control of code integrity
 
 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
 At the end of section "0x01 Function redefinitions" we mentioned that we can retrieve the code of a function in JavaScript with toString() method. As we said, this can be useful to check if a function was redefined, and indeed, this very same idea can be used to know if the code of a function was modified. 
@@ -277,9 +291,10 @@ The concept behind this technique is the same used to generate image files wich 
 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
 About how to create this type of collisions there are tons of articles (even appeared some examples in PoC||GTFO) but the first one I read and could replicate was [this with PHP](https://natmchugh.blogspot.com.es/2014/10/how-i-made-two-php-files-with-same-md5.html). You can precalculate pretty fast the blocks needed to generate the collisions. Indeed [here](https://gist.github.com/cgvwzq/c70901dc46aeb8a3d70dc70177428a30) is an example created by [@cgvwzq](https://twitter.com/cgvwzq) were the integrity of the function content is checked by this way.
 
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
 As we stated before we need to use strong obfuscation with this kind of techniques.
 
-## 0x07 Proxy Objects
+## 0x08 Proxy Objects (OLD, deprecated)
 
 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
 The proxy object is one of the most useful tools introducted recently in the world of JavaScript. This object can be used to snoop inside other objects, change its behavior (like a hook), or trigger an action under certain circumstances. For example if we want to trace every call to __document.createElement__ and log this information we can create a proxy object:
@@ -371,7 +386,45 @@ Now our detection will fail:
 "function createElement() { [native code] }"
 ```
 
-## 0x07 Restrictional enviroments
+## 0x09 Proxy Objects
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+The exception trick can not be used anymore. Luckly, we can still detecting the use of proxy objects via __toString__ length. For example, a naive `document.createElement` has a size of 42 (Chrome):
+
+```javascript
+document.createElement.toString().length
+42
+```
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+On the other hand, this value will change when we create a proxy:
+
+```javascript
+const handler = {
+    apply: function(target, thisArg, args) {
+        console.log("Intercepted call");
+        return target.apply(thisArg, args);
+    }
+}
+
+document.createElement = new Proxy(document.createElement, handler);
+
+document.createElement.toString().length
+29
+```
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+So we can do something like:
+
+```javascript
+if (document.createElement.toString().length < 30) {
+    console.log("I saw your proxy");
+}
+else {
+    console.log("Not a proxy");
+}
+```
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+This trick can not be used in windoww object, but still being useful.
+
+## 0x0A Restrictional enviroments
 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
 As we stated in the introduction, one of the things that we want is to try to detect if the code is being executed inside the right enviroment. What we call "the right enviroment" is:
 
@@ -434,7 +487,14 @@ VM104:1 Uncaught ReferenceError: global is not defined
 We can search for tons of metadata that exists only in a browser. Some ideas of this kind that we can retrieve can be seen in the [Panopticlick Project](https://panopticlick.eff.org).
 
 
-## 0x08 WebGL
+## 0x0B Unimplemented syntax
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+Most tools used to debug / sandbox JavaScript code (JSDetox, JSUnpack, etc.) has old engines, so we can use syntax quirks that are recently implemented to break the parser. For example, the exponential operator (__**__) can not be parsed by JSUnpack (__SyntaxError: Missing) after argument list__) and JSDetox (__Unexpected token *__).
+
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+Another trick related with syntax is the usage of [destructuring assignment](https://hacks.mozilla.org/2015/05/es6-in-depth-destructuring/) to set values. For example, a simple `window.top.location = 'JavaScript:alert(1337)'` can be expressed as `[{0:top[(0).toString.call(477066499943,30)]}] = [['JavaScript:alert(1337)']]. Old parsers will break with this syntax __:)__ .
+
+## 0x0C WebGL
 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
 We will not talk about anti-reversing or obfuscation inside WebGL because you can find tons of information in the net (and WebGL is dark and full of terrors). Instead of that we will mention the use of WebGL to process data and interact with the JavaScript, so if someone tries to "emulate" our snippet of JavaScript he will need to provide WebGL support to his emulator.
 
