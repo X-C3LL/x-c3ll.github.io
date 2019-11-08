@@ -180,7 +180,7 @@ Accesing the info is trivial:
 
  (...)                                                                                                                                                                                                                                                                                        
  f = open("captured", "rb")
- ake = KaitaiStream(f)
+ fake = KaitaiStream(f)
  data = FakeProtocol(fake)
  print "Version: " + str(data.version)
  print "Device: " + str(hex(data.device))
