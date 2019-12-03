@@ -10,7 +10,7 @@ authors:
     - X-C3LL
 ---
 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-__Last Update:__ 2019-10-18
+__Last Update:__ 2019-12-04
 
 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
 The intention of this post is to document techniques and tricks that can be used as an alternative to JavaScript in the context of an injection. It is just a recopilation that I will be updating every few months (or at least I gonna try it...). Maybe this kind of recopilation is not useful for the majority of the mortals but I find interesting to "preserve" this information all together. All of them are well-known techniques, nothing fancy here. If you know more primitives please ping me at twitter ([@TheXC3LL](https://twitter.com/TheXC3LL)) so I can add them.
@@ -52,7 +52,7 @@ Using the subsequent-sibling combinator (__~__) it is possible to represent the 
 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
 To perform this attack we need to update the ruleset to match the next char in each iteration. A shabby approach can be the use of `<meta-refresh...>`. A better idea can be the combination of this attack with CSS import recursion (this technique will be discussed later).
 
-## Text node exfiltration
+## Text node exfiltration (I): ligatures 
 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
 __Reference:__ [Wykradanie danych w świetnym stylu – czyli jak wykorzystać CSS-y do ataków na webaplikację](https://sekurak.pl/wykradanie-danych-w-swietnym-stylu-czyli-jak-wykorzystac-css-y-do-atakow-na-webaplikacje/)
 
@@ -128,6 +128,29 @@ This trick is an alternative to onerror. Basically the main idea is to use a cus
 
 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
 We can abuse this technique for example to build a network scanner (to scan webs hosted in the internal network, even fingerprint well-known web platforms).
+
+
+## Text node exfiltration (II): leaking the charset with a default font
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+__Reference:__ [PoC using Comic Sans by @Cgvwzq & @Terjanq](https://demo.vwzq.net/css2.html)
+
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+This trick was released in this [Slackers thread](https://www.reddit.com/r/Slackers/comments/dzrx2s/what_can_we_do_with_single_css_injection/). The charset used in a text node can be leaked using the default fonts intalled in the browser: no external -or custom- fonts are needed. The PoC linked as reference is well commented, so we are just going to highlight some points in a human-readable way __;-)__.
+
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+The key is to use an animation to grow the div width from 0 to the end of the text, the size of a char each time. Doing this we can "split" the text in two parts: a "prefix" (the first line) and a "suffix", so every time the div increases its width a new char moves from the "suffix" to the "prefix". Something like:
+
+__C__<br>ADB
+
+__CA__<br>DB
+
+__CAD__<br>B
+
+__CADB__
+
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+When a new char goes to the first line, the unicode-range trick is used to detect the new character in the prefix. This detection is made changing the font to Comic Sans, which its heigth is superior so a vertical scrollbar is triggered (leaking the char value). This way we can leak every different character one time. __We can detect if a character is repated but not what character is repeated__.
+
 
 
 ## Final words
