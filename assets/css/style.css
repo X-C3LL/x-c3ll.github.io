@@ -8,7 +8,8 @@ body {
 	width: 80%;
 	border: 1px dashed rgba(255,255,255,0.7);
 	font-family: "Roboto";
-	font-size: 16px;
+	font-size: 18px;
+	line-height: 27px;
 }
 
 hr {
