@@ -5,10 +5,10 @@ permalink: cves.html
 ---
 
 # 2019
-:: [CVE-2019-14459](https://cve.mitre.org/cgi-bin/cvename.cgi?name=CVE-2019-14459) :: Nfdump / Nfsense :: <br />
-:: [CVE-2019-12725](https://cve.mitre.org/cgi-bin/cvename.cgi?name=CVE-2019-12725) :: ZeroShell :: <br />
-:: [CVE-2019-12386](https://cve.mitre.org/cgi-bin/cvename.cgi?name=CVE-2019-12386) :: AMPache :: <br />
-:: [CVE-2019-12727](https://cve.mitre.org/cgi-bin/cvename.cgi?name=CVE-2019-12727) :: Ubiquiti AirCam :: <br />
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;:: [CVE-2019-14459](https://cve.mitre.org/cgi-bin/cvename.cgi?name=CVE-2019-14459) :: Nfdump / Nfsense :: <br />
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;:: [CVE-2019-12725](https://cve.mitre.org/cgi-bin/cvename.cgi?name=CVE-2019-12725) :: ZeroShell :: <br />
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;:: [CVE-2019-12386](https://cve.mitre.org/cgi-bin/cvename.cgi?name=CVE-2019-12386) :: AMPache :: <br />
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;:: [CVE-2019-12727](https://cve.mitre.org/cgi-bin/cvename.cgi?name=CVE-2019-12727) :: Ubiquiti AirCam :: <br />
 
 # 2018
 :: [CVE-2018-7081](https://cve.mitre.org/cgi-bin/cvename.cgi?name=CVE-2018-7081) :: Aruba Mobility Controller (ArubaOS) :: <br />
