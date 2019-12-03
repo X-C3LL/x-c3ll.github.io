@@ -15,8 +15,10 @@ My name is Juan Manuel Fernández (a.k.a. [X-C3LL](https://twitter.com/TheXC3LL)
 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
 I am a proud member of [Ka0labs](https://blog.ka0labs.net/) and I usually play CTFs with the teams [Insanity](https://ctftime.org/team/812) & [ID-10-T](https://ctftime.org/team/50611). Also in recent years I have collected some [CVEs]({{ site.baseurl}}/cves.html)
 
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
 PS. As you could notice, my skills with CSS are close to NaN.
 
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
 Feel free to contact me at [twitter](https://twitter.com/TheXC3LL) or [LinkedIn](https://www.linkedin.com/in/thexc3ll/).
 <center>
 <img src="{{ site.baseurl }}/assets/img/logo-reduced2.png" alt="ka0labs-logo" width="25%" align="middle">
