@@ -12,6 +12,15 @@ body {
 	line-height: 27px;
 }
 
+body::selection {
+	background: coral;
+}
+
+body::-moz-selection { b
+	ackground: coral; 
+}
+
+
 hr {
     border: 1px dashed rgba(255,255,255,0.7);
 }
