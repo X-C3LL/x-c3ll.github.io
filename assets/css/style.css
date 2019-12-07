@@ -12,11 +12,11 @@ body {
 	line-height: 27px;
 }
 
-body::selection {
+::selection {
 	background: coral;
 }
 
-body::-moz-selection { b
+::-moz-selection { 
 	background: coral; 
 }
 
