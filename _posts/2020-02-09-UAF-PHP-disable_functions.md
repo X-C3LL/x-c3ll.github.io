@@ -120,7 +120,7 @@ This tactic prevents the calls to "dangerous" functions inside the script but...
 
 ## When the memory corruption comes handy
 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-The first thing we need is to found the __zif_system__ location at runtime. For that we need a primitive to leak arbitrary memory contents. The exploit solves this search finding the binary base and then parsing the ELF structures in order to find the target function:
+The first thing we need is to findthe __zif_system__ location at runtime. For that we need a primitive to leak arbitrary memory contents. The exploit solves this search finding the binary base and then parsing the ELF structures in order to find the target function:
 
 ```php
 function parse_elf($base) {
