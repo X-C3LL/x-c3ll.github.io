@@ -54,22 +54,23 @@ mothra@kaiju:~/holydays|⇒  ldd $(locate PwnAdventure3-Linux-Shipping)
 
 import frida
 import cxxfilt
+from __future__ import print_function
 
 
 session = frida.attach("PwnAdventure3-Linux-Shipping")
 script = session.create_script("""
     var exports = Module.enumerateExportsSync("libGameLogic.so");
-    for (i = 0; i < exports.length; i++) {
+    for (var i = 0; i < exports.length; i++) {
         send(exports[i].name);
     }
-        """);
+""")
 
 def on_message(message, data):
-    print message["payload"] + " - " + cxxfilt.demangle(message["payload"])
+    print(message["payload"] + " - " + cxxfilt.demangle(message["payload"]))
 
 script.on('message', on_message)
 script.load()
- ```
+```
   &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
 What are we doing here? We are attaching ourself to the running game process (PwnAdventure3-Linux-Shipping), then we create a script (JavaScript) where the main logic lies. From this JavaScript snippet we can access to the Frida API, and all the magic will come true __:)__: with __Module.enumerateExportsSync(libname)__ we are going to retrieve an array with all the exports, then we iterate over the array and pass the information to the main python script using __send()__. In the python we just call __cxxfilt.demangle()__ to demangle the name.
 
