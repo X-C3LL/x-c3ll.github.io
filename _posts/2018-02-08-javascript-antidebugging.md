@@ -10,7 +10,7 @@ authors:
     - X-C3LL
 ---
 
-__Disclaimer:__ _This post was updated (Nov 2019)_
+__Disclaimer:__ _This post was updated (April 2020)_
 
 
 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
@@ -224,7 +224,7 @@ Object.defineProperty(div, "id", {get: () => {
 }});
 ```
 
-## 0x05 DevTools detection (II) [Chrome]: size changes
+## 0x05 DevTools detection (II): size changes
 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
 If DevTools is opened (unless it was opened as undocked) the difference between __window.outerWidth/Height__ and __window.innerWidth/Height__ will change, so it can be measured in a loop. This trick is used by [Devtools-detect](https://github.com/sindresorhus/devtools-detect):
 
@@ -235,7 +235,47 @@ If DevTools is opened (unless it was opened as undocked) the difference between 
 ```
 
 
-## 0x06 Implicit control of flow integrity
+
+## 0x06 DevTools detection (III): SourceMap
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+This technique was explained by [@WeizmanGal](https://twitter.com/WeizmanGal) in his [blog](https://weizman.github.io/website/?javascript-anti-debugging-some-next-level-shit-part-1) and is based on HTTP Leaks via JavaScript source maps. [Source maps](https://developer.mozilla.org/en-US/docs/Tools/Debugger/How_to/Use_a_source_map) are files that hold information from the original JavaScript file before it gets minified/uglyfied, so this information can be used by the browser DevTools in order to facilitate the debugging process. The source map file associated with a script is set adding the line __//# sourceMappingURL=http://server/YourFileLocation__ to the end, and it is fetched when the DevTools are opened. This HTTP leak can be used as a canary to notify the fact that someone is opening the DevTools but also can be used to determine what flow the program must follow.
+
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+We can add constraints to our code to veer the program flow to reach fake regions or just to stop decrypting the code because the key is derived from the value used as constraint. This value used to take one direction or another can be, for example, a cookie. And here comes an interesting fact: __we can set a cookie when our server is requested for a source map file__. So, we can check in our code the value of a cookie that will be set or changed only when the browser fetchs our source map file __:)__. 
+
+```html
+<html>
+     <head>
+         <script>
+      // From https://weizman.github.io/website/?javascript-anti-debugging-some-next-level-shit-part-1
+    function  smap(url)  {
+         const script = document.createElement('script');
+         script.textContent =  `//# sourceMappingURL=${url}`;
+         document.head.appendChild(script);
+         script.remove();  // that's right! the script doesn't even have to stay in DOM for this feature to work! how cool is that?!
+    }
+    smap('http://test/devtools.php'); // <?php setcookie("DevTools", "True"); ?>
+         </script>
+     <script>
+    function getCookieValue(a) {
+        var b = document.cookie.match('(^|[^;]+)\\s*' + a + '\\s*=\\s*([^;]+)');
+        return b ? b.pop() : '';
+    }
+
+    setInterval( () => { 
+            if (getCookieValue("DevTools") == "True") {
+            alert("DevTools opened!");
+        }
+         }, 100);
+     </script>
+     </head>
+     <body>
+         <h1>Testing SourceMappingURL</h1>
+     </body>
+ </html>
+```
+
+## 0x07 Implicit control of flow integrity
 
 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
 One of the first steps when we try to deobfuscate a JavaScript snippet is start to rename some variables and functions in order to clarify the source code. You just split the code in smaller chunks of code and begin renaming here and there. In JavaScript we can check if the name of a function has changed or keep the same name. Or to be more correct we can check if the stack trace contains the original names and the original order.
@@ -272,7 +312,7 @@ When you execute this code you will see the string `#test1test2test3test4`. If w
 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
 Keep in mind that this trick needs to be combined with strong obfuscation to be useful.
 
-## 0x07 Implicit control of code integrity
+## 0x08 Implicit control of code integrity
 
 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
 At the end of section "0x01 Function redefinitions" we mentioned that we can retrieve the code of a function in JavaScript with toString() method. As we said, this can be useful to check if a function was redefined, and indeed, this very same idea can be used to know if the code of a function was modified. 
@@ -294,7 +334,7 @@ About how to create this type of collisions there are tons of articles (even app
 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
 As we stated before we need to use strong obfuscation with this kind of techniques.
 
-## 0x08 Proxy Objects (OLD, deprecated)
+## 0x09 Proxy Objects (OLD, deprecated)
 
 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
 The proxy object is one of the most useful tools introducted recently in the world of JavaScript. This object can be used to snoop inside other objects, change its behavior (like a hook), or trigger an action under certain circumstances. For example if we want to trace every call to __document.createElement__ and log this information we can create a proxy object:
@@ -386,7 +426,7 @@ Now our detection will fail:
 "function createElement() { [native code] }"
 ```
 
-## 0x09 Proxy Objects
+## 0x0A Proxy Objects
 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
 The exception trick can not be used anymore. Luckly, we can still detecting the use of proxy objects via __toString__ length. For example, a naive `document.createElement` has a size of 42 (Chrome):
 
@@ -424,7 +464,7 @@ else {
 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
 This trick can not be used in windoww object, but still being useful.
 
-## 0x0A Restrictional enviroments
+## 0x0B Restrictional enviroments
 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
 As we stated in the introduction, one of the things that we want is to try to detect if the code is being executed inside the right enviroment. What we call "the right enviroment" is:
 
@@ -487,14 +527,14 @@ VM104:1 Uncaught ReferenceError: global is not defined
 We can search for tons of metadata that exists only in a browser. Some ideas of this kind that we can retrieve can be seen in the [Panopticlick Project](https://panopticlick.eff.org).
 
 
-## 0x0B Unimplemented syntax
+## 0x0C Unimplemented syntax
 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
 Most tools used to debug / sandbox JavaScript code (JSDetox, JSUnpack, etc.) has old engines, so we can use syntax quirks that are recently implemented to break the parser. For example, the exponential operator (__**__) can not be parsed by JSUnpack (__SyntaxError: Missing) after argument list__) and JSDetox (__Unexpected token *__).
 
 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
 Another trick related with syntax is the usage of [destructuring assignment](https://hacks.mozilla.org/2015/05/es6-in-depth-destructuring/) to set values. For example, a simple `window.top.location = 'JavaScript:alert(1337)'` can be expressed as `[{0:top[(0).toString.call(477066499943,30)]}] = [['JavaScript:alert(1337)']]. Old parsers will break with this syntax __:)__ .
 
-## 0x0C WebGL
+## 0x0D WebGL
 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
 We will not talk about anti-reversing or obfuscation inside WebGL because you can find tons of information in the net (and WebGL is dark and full of terrors). Instead of that we will mention the use of WebGL to process data and interact with the JavaScript, so if someone tries to "emulate" our snippet of JavaScript he will need to provide WebGL support to his emulator.
 
