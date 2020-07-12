@@ -4,7 +4,7 @@ title: "That loyal MySQL is a rogue one: a tale of a (partially) failed idea"
 date: 2020-07-12 01:03:37
 categories: posts
 en: true
-description: Hooking mysld to steal net-NTLM hashes from developers. 
+description: Hooking mysqld to steal net-NTLM hashes from developers. 
 keywords: "net-ntlm, rogue mysql, hooking, red team, LD_PRELOAD, load data local"
 authors:
     - X-C3LL
