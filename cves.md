@@ -5,6 +5,8 @@ permalink: cves.html
 ---
 # 2020
 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;:: [CVE-2020-26574](https://adepts.of0x.cc/leostream-xss-to-rce/) :: Leostream Connection Broker :: <br />
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;:: [CVE-2020-26878](https://adepts.of0x.cc/ruckus-vriot-rce/) :: Ruckus VRIOT (IoT Controller) :: <br />
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;:: [CVE-2020-26879](https://adepts.of0x.cc/ruckus-vriot-rce/) :: Ruckus VRIOT (IoT Controller) :: <br />
 
 # 2019
 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;:: [CVE-2019-14459](https://cve.mitre.org/cgi-bin/cvename.cgi?name=CVE-2019-14459) :: Nfdump / Nfsense :: <br />
