@@ -8,6 +8,9 @@ permalink: stuff.html
 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;__::__ [Técnicas antidebugging en JavaScript (browsers)](https://github.com/X-C3LL/congresos-slides/blob/master/ANtidebugging-JS-PDF.pdf) __::__ EuskalHack III (2018)<br>
 
 # Articles published on other websites
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;__::__ [Hijacking connections without injections: a ShadowMoving approach to the art of pivoting](https://adepts.of0x.cc/shadowmove-hijack-socket/) (2021) __::__<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;__::__ [The worst of the two worlds: Excel meets Outlook](https://adepts.of0x.cc/vba-outlook/) (2020) __::__<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;__::__ [Shedding light on creating VBA macros](https://adepts.of0x.cc/vba-tools/) (2020) __::__<br>
 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;__::__ [Remote Command Execution in Ruckus IoT Controller (CVE-2020-26878 & CVE-2020-26879)](https://adepts.of0x.cc/ruckus-vriot-rce/) (2020) __::__<br>
 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;__::__ [Hacking in an epistolary way: implementing kerberoast in pure VBA](https://adepts.of0x.cc/kerberoast-vba-macro/) (2020) __::__<br>
 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;__::__ [A brief encounter with Leostream Connect Broker](https://adepts.of0x.cc/leostream-xss-to-rce/) (2020) __::__<br>
