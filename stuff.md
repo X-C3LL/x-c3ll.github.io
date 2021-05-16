@@ -8,7 +8,6 @@ permalink: stuff.html
 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;__::__ [Técnicas antidebugging en JavaScript (browsers)](https://github.com/X-C3LL/congresos-slides/blob/master/ANtidebugging-JS-PDF.pdf) __::__ EuskalHack III (2018)<br>
 
 # Articles published on other websites
-&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;__::__ [From theory to practice: analysis and PoC development for CVE-2020-28018 (Use-After-Free in Exim)](https://adepts.of0x.cc/exim-cve-2020-28018/) (2021) __::__<br>
 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;__::__ [
 One thousand and one ways to copy your shellcode to memory (VBA Macros)](https://adepts.of0x.cc/alternatives-copy-shellcode/) (2021) __::__<br>
 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;__::__ [The Kerberos Credential Thievery Compendium (GNU/Linux)](https://adepts.of0x.cc/kerberos-thievery-linux/) (2021) __::__<br>
