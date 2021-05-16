@@ -10,7 +10,7 @@ permalink: stuff.html
 # Articles published on other websites
 
 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;__::__ [
-From theory to practice: analysis and PoC development for CVE-2020-28018 (Use-After-Free in Exim)](https://adepts.of0x.cc/exim-cve-2020-28018/) (2021) __::__<br>
+A physical graffiti of LSASS: getting credentials from physical memory for fun and learning](https://adepts.of0x.cc/physical-graffiti-lsass/) (2021) __::__<br>
 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;__::__ [The Kerberos Credential Thievery Compendium (GNU/Linux)](https://adepts.of0x.cc/kerberos-thievery-linux/) (2021) __::__<br>
 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;__::__ [Hijacking connections without injections: a ShadowMoving approach to the art of pivoting](https://adepts.of0x.cc/shadowmove-hijack-socket/) (2021) __::__<br>
 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;__::__ [The worst of the two worlds: Excel meets Outlook](https://adepts.of0x.cc/vba-outlook/) (2020) __::__<br>
