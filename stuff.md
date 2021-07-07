@@ -10,6 +10,10 @@ permalink: stuff.html
 # Articles published on other websites
 
 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;__::__ [
+Knock! Knock! The postman is here! (abusing Mailslots and PortKnocking for connectionless shells)](https://adepts.of0x.cc/connectionless-shells/) (2021) __::__<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;__::__ [
+Don't use commands, use code: the tale of Netsh & PortProxy](https://adepts.of0x.cc/netsh-portproxy-code/) (2021) __::__<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;__::__ [
 A physical graffiti of LSASS: getting credentials from physical memory for fun and learning](https://adepts.of0x.cc/physical-graffiti-lsass/) (2021) __::__<br>
 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;__::__ [The Kerberos Credential Thievery Compendium (GNU/Linux)](https://adepts.of0x.cc/kerberos-thievery-linux/) (2021) __::__<br>
 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;__::__ [Hijacking connections without injections: a ShadowMoving approach to the art of pivoting](https://adepts.of0x.cc/shadowmove-hijack-socket/) (2021) __::__<br>
