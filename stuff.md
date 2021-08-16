@@ -10,6 +10,8 @@ permalink: stuff.html
 # Articles published on other websites
 
 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;__::__ [
+Adding a native sniffer to your implants: decomposing and recomposing PktMon](https://adepts.of0x.cc/pktmon-dissection/) (2021) __::__<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;__::__ [
 Knock! Knock! The postman is here! (abusing Mailslots and PortKnocking for connectionless shells)](https://adepts.of0x.cc/connectionless-shells/) (2021) __::__<br>
 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;__::__ [
 Don't use commands, use code: the tale of Netsh & PortProxy](https://adepts.of0x.cc/netsh-portproxy-code/) (2021) __::__<br>
