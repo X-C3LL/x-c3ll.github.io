@@ -10,7 +10,7 @@ authors:
     - X-C3LL
 ---
 
-__Disclaimer:__ _This post was updated (April 2020)_
+__Disclaimer:__ _This post was updated (September 2021)_
 
 
 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
@@ -274,8 +274,44 @@ We can add constraints to our code to veer the program flow to reach fake region
      </body>
  </html>
 ```
+## 0x07 DevTools detection (IV): Scope Pane
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+This technique was also explained by [@WeizmanGal](https://twitter.com/WeizmanGal) in his [blog](https://weizman.github.io/?javascript-anti-debugging-some-next-level-shit-part-2) and consists in the abuse of DevlTools' [Scope Pane](https://developer.chrome.com/docs/devtools/javascript/#check-values). The Scope Pane needs to evaluate the JavaScript in order to represent the expected value, so we can smuggle inside a function a small canary that will be triggered when someone tries to debug it. Also our canary is going to be executed while the main thread is paused, so it can give a few extra headaches.
 
-## 0x07 Implicit control of flow integrity
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+Example:
+
+```javascript
+function malicious() {
+    const detect = (function(){
+        const dummy = /./;
+        dummy.toString = () => {
+            alert('someone is debugging the malicious function!');
+            return 'SOME_NAME';
+        };
+        return dummy;
+    }());
+
+    // do a malicious action
+    if (window.stealUserCookies) window.stealUserCookies();
+}
+
+function legit() {
+    // do a legit action
+    return 1 + 1;
+}
+
+function main() {
+    legit();
+    malicious();
+}
+main();
+```
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+Put a breakpoint inside `malicious()` and enjoy the alert!
+
+
+## 0x08 Implicit control of flow integrity
 
 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
 One of the first steps when we try to deobfuscate a JavaScript snippet is start to rename some variables and functions in order to clarify the source code. You just split the code in smaller chunks of code and begin renaming here and there. In JavaScript we can check if the name of a function has changed or keep the same name. Or to be more correct we can check if the stack trace contains the original names and the original order.
@@ -312,7 +348,7 @@ When you execute this code you will see the string `#test1test2test3test4`. If w
 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
 Keep in mind that this trick needs to be combined with strong obfuscation to be useful.
 
-## 0x08 Implicit control of code integrity
+## 0x09 Implicit control of code integrity
 
 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
 At the end of section "0x01 Function redefinitions" we mentioned that we can retrieve the code of a function in JavaScript with toString() method. As we said, this can be useful to check if a function was redefined, and indeed, this very same idea can be used to know if the code of a function was modified. 
@@ -334,7 +370,7 @@ About how to create this type of collisions there are tons of articles (even app
 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
 As we stated before we need to use strong obfuscation with this kind of techniques.
 
-## 0x09 Proxy Objects (OLD, deprecated)
+## 0x0A Proxy Objects (OLD, deprecated)
 
 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
 The proxy object is one of the most useful tools introducted recently in the world of JavaScript. This object can be used to snoop inside other objects, change its behavior (like a hook), or trigger an action under certain circumstances. For example if we want to trace every call to __document.createElement__ and log this information we can create a proxy object:
@@ -426,7 +462,7 @@ Now our detection will fail:
 "function createElement() { [native code] }"
 ```
 
-## 0x0A Proxy Objects
+## 0x0B Proxy Objects
 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
 The exception trick can not be used anymore. Luckly, we can still detecting the use of proxy objects via __toString__ length. For example, a naive `document.createElement` has a size of 42 (Chrome):
 
@@ -464,7 +500,7 @@ else {
 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
 This trick can not be used in windoww object, but still being useful.
 
-## 0x0B Restrictional enviroments
+## 0x0C Restrictional enviroments
 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
 As we stated in the introduction, one of the things that we want is to try to detect if the code is being executed inside the right enviroment. What we call "the right enviroment" is:
 
@@ -527,14 +563,14 @@ VM104:1 Uncaught ReferenceError: global is not defined
 We can search for tons of metadata that exists only in a browser. Some ideas of this kind that we can retrieve can be seen in the [Panopticlick Project](https://panopticlick.eff.org).
 
 
-## 0x0C Unimplemented syntax
+## 0x0D Unimplemented syntax
 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
 Most tools used to debug / sandbox JavaScript code (JSDetox, JSUnpack, etc.) has old engines, so we can use syntax quirks that are recently implemented to break the parser. For example, the exponential operator (__**__) can not be parsed by JSUnpack (__SyntaxError: Missing) after argument list__) and JSDetox (__Unexpected token *__).
 
 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
 Another trick related with syntax is the usage of [destructuring assignment](https://hacks.mozilla.org/2015/05/es6-in-depth-destructuring/) to set values. For example, a simple `window.top.location = 'JavaScript:alert(1337)'` can be expressed as `[{0:top[(0).toString.call(477066499943,30)]}] = [['JavaScript:alert(1337)']]. Old parsers will break with this syntax __:)__ .
 
-## 0x0D WebGL
+## 0x0E WebGL
 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
 We will not talk about anti-reversing or obfuscation inside WebGL because you can find tons of information in the net (and WebGL is dark and full of terrors). Instead of that we will mention the use of WebGL to process data and interact with the JavaScript, so if someone tries to "emulate" our snippet of JavaScript he will need to provide WebGL support to his emulator.
 
