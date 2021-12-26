@@ -10,7 +10,7 @@ authors:
     - X-C3LL
 ---
 
-__Disclaimer:__ _This post was updated (September 2021)_
+__Disclaimer:__ _This post was updated (December 2021)_
 
 
 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
@@ -159,7 +159,7 @@ If you execute this code with your DevTools opened, a prompt asking you to resum
 work reversing the script  until this is fixed.
 
 ```javascript
-setTimeout(function() {while (true) {eval("debugger")
+setTimeout(function() {while (true) {eval("debugger")}})
 ```
 
 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
