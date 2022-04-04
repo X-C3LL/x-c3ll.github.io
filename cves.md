@@ -3,6 +3,10 @@ title: List of CVEs
 layout: default
 permalink: cves.html
 ---
+# 2022
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;:: [CVE-2022-26952](https://github.com/X-C3LL/PoC-CVEs/blob/master/CVE-2022-26952%20%26%20CVE-2022-26953/readme.md) :: Digi Passport :: <br />
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;:: [CVE-2022-26953](https://github.com/X-C3LL/PoC-CVEs/blob/master/CVE-2022-26952%20%26%20CVE-2022-26953/readme.md) :: Digi Passport :: <br />
+
 # 2020
 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;:: [CVE-2020-26574](https://adepts.of0x.cc/leostream-xss-to-rce/) :: Leostream Connection Broker :: <br />
 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;:: [CVE-2020-26878](https://adepts.of0x.cc/ruckus-vriot-rce/) :: Ruckus VRIOT (IoT Controller) :: <br />
