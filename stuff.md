@@ -5,10 +5,19 @@ permalink: stuff.html
 ---
 
 # Slides
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;__::__ [Demystifying Disable_functions](https://github.com/X-C3LL/congresos-slides/blob/master/Demystifying%20Disable_functions%20(EUSKALHACK%20V).pdf) __::__ EuskalHack V (2022)<br>
 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;__::__ [Técnicas antidebugging en JavaScript (browsers)](https://github.com/X-C3LL/congresos-slides/blob/master/ANtidebugging-JS-PDF.pdf) __::__ EuskalHack III (2018)<br>
 
 # Articles published on other websites
 
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;__::__ [
+Spice up your persistence: loading PHP extensions from memory](https://adepts.of0x.cc/dlopen-from-memory-php/) (2022) __::__<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;__::__ [
+Autodial(DLL)ing Your Way](https://www.mdsec.co.uk/2022/10/autodialdlling-your-way/) (2022) __::__<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;__::__ [
+Thoughts on the use of noVNC for phishing campaigns](https://adepts.of0x.cc/novnc-phishing/) (2022) __::__<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;__::__ [
+In the land of PHP you will always be (use-after-)free](https://adepts.of0x.cc/challenge01-php-uaf/) (2022) __::__<br>
 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;__::__ [
 Adding a native sniffer to your implants: decomposing and recomposing PktMon](https://adepts.of0x.cc/pktmon-dissection/) (2021) __::__<br>
 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;__::__ [
