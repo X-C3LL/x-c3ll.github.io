@@ -5,6 +5,7 @@ permalink: stuff.html
 ---
 
 # Slides
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;__::__ [Red Team: convertir la improvisación en arte](https://github.com/X-C3LL/congresos-slides/blob/master/Red%20Team%20convertir%20la%20improvisaci%C3%B3n%20en%20arte-6.pdf) __::__ h-c0n V Edition (2023)<br>
 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;__::__ [Demystifying Disable_functions](https://github.com/X-C3LL/congresos-slides/blob/master/Demystifying%20Disable_functions%20(EUSKALHACK%20V).pdf) __::__ EuskalHack V (2022)<br>
 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;__::__ [Técnicas antidebugging en JavaScript (browsers)](https://github.com/X-C3LL/congresos-slides/blob/master/ANtidebugging-JS-PDF.pdf) __::__ EuskalHack III (2018)<br>
 
