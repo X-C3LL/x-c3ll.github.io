@@ -3,6 +3,9 @@ title: List of CVEs
 layout: default
 permalink: cves.html
 ---
+# 2023
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;:: [CVE-2023-26258](https://www.mdsec.co.uk/2023/06/cve-2023-26258-remote-code-execution-in-arcserve-udp-backup/) :: ArcServe UDP :: <br />
+
 # 2022
 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;:: [CVE-2022-26952](https://github.com/X-C3LL/PoC-CVEs/blob/master/CVE-2022-26952%20%26%20CVE-2022-26953/readme.md) :: Digi Passport :: <br />
 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;:: [CVE-2022-26953](https://github.com/X-C3LL/PoC-CVEs/blob/master/CVE-2022-26952%20%26%20CVE-2022-26953/readme.md) :: Digi Passport :: <br />
