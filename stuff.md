@@ -10,7 +10,16 @@ permalink: stuff.html
 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;__::__ [Técnicas antidebugging en JavaScript (browsers)](https://github.com/X-C3LL/congresos-slides/blob/master/ANtidebugging-JS-PDF.pdf) __::__ EuskalHack III (2018)<br>
 
 # Articles published on other websites
-
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;__::__ [
+VBA: having fun with macros, overwritten pointers & R/W/X memory](https://adepts.of0x.cc/vba-hijack-pointers-rwa/) (2023) __::__<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;__::__ [
+Developers are juicy targets: DCOM & Visual Studio](https://adepts.of0x.cc/visual-studio-dcom/) (2023) __::__<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;__::__ [
+VBA: resolving exports in runtime without NtQueryInformationProcess or GetProcAddress](https://adepts.of0x.cc/vba-exports-runtime/) (2023) __::__<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;__::__ [
+Beating an old PHP source code protector](https://adepts.of0x.cc/decrypt-nu-coder/) (2023) __::__<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;__::__ [
+CVE-2023-26258 – Remote Code Execution in ArcServe UDP Backup](https://www.mdsec.co.uk/2023/06/cve-2023-26258-remote-code-execution-in-arcserve-udp-backup/) (2023) __::__<br>
 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;__::__ [
 Spice up your persistence: loading PHP extensions from memory](https://adepts.of0x.cc/dlopen-from-memory-php/) (2022) __::__<br>
 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;__::__ [
