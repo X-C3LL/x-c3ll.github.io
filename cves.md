@@ -3,6 +3,10 @@ title: List of CVEs
 layout: default
 permalink: cves.html
 ---
+# 2024
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;:: [CVE-2024-22107](https://github.com/X-C3LL/PoC-CVEs/blob/master/2024/CVE-2024-22107%20%26%20CVE-2024-22108/) :: GTB Central Console :: <br />
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;:: [CVE-2024-22108](https://github.com/X-C3LL/PoC-CVEs/blob/master/2024/CVE-2024-22107%20%26%20CVE-2024-22108/) :: GTB Central Console :: <br />
+
 # 2023
 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;:: [CVE-2023-26258](https://www.mdsec.co.uk/2023/06/cve-2023-26258-remote-code-execution-in-arcserve-udp-backup/) :: ArcServe UDP :: <br />
 
