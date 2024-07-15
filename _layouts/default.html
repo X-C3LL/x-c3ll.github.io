@@ -1,11 +1,61 @@
 <!DOCTYPE html>
-<html lang="{{ site.lang }}">
-	{% include head.html %}
-	<body>
-        {% include header.html %}
-        {% include nav.html %}
-		<main>
-			{{ content }}
-		</main>
-	</body>
+<html lang="{{ site.lang | default: "en-US" }}">
+  <head>
+    <meta charset="UTF-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+
+{% seo %}
+    <link rel="stylesheet" href="{{ "/assets/css/style.css?v=" | append: site.github.build_revision | relative_url }}">
+    <!--[if lt IE 9]>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html5shiv/3.7.3/html5shiv.min.js"></script>
+    <![endif]-->
+    {% include head-custom.html %}
+  </head>
+  <body>
+    <div class="wrapper">
+      <header>
+
+        <h1><a href="{{ "/" | absolute_url }}">{{ site.title | default: site.github.repository_name }}</a></h1>
+
+        {% if site.logo %}
+          <img src="{{site.logo | relative_url}}" alt="Logo" />
+        {% endif %}
+
+        <p>{{ site.description | default: site.github.project_tagline }}</p>
+
+
+        {% if site.show_downloads %}
+        <ul class="downloads">
+          <li><a href="https://twitter.com/TheXC3LL">@TheXC3LL<strong>Twitter</strong></a></li>
+          <li><a href="https://www.linkedin.com/in/thexc3ll/">thexc3ll<strong>LinkedIn</strong></a></li>
+          <li><a href="https://mastodon.social/@XC3LL">@XC3LL<strong>Mastodon</strong></a></li>
+        </ul>
+        {% endif %}
+               <nav>
+  <ul>
+    <li><a href="/">Home</a></li>
+  <li><a href="{{ site.baseurl }}/about.html">About</a></li>
+    <li><a href="{{ site.baseurl }}/cves.html">CVEs</a></li>
+    <li><a href="{{ site.baseurl }}/tools.html">Tools</a></li>
+    <li><a href="{{ site.baseurl }}/stuff.html">Slides & Articles</a></li>
+  <li><a href="{{ site.baseurl }}/rss.xml">RSS</a>/<a href="{{ site.baseurl }}/atom.xml">Atom</a></li>
+  
+</ul>
+</nav>
+      </header>
+      <section>
+
+      {{ content }}
+
+      </section>
+      <footer>
+        {% if site.github.is_project_page %}
+        <p>This project is maintained by <a href="{{ site.github.owner_url }}">{{ site.github.owner_name }}</a></p>
+        {% endif %}
+        <p><small>Hosted on GitHub Pages &mdash; Theme by <a href="https://github.com/orderedlist">orderedlist</a></small></p>
+      </footer>
+    </div>
+    <script src="{{ "/assets/js/scale.fix.js" | relative_url }}"></script>
+  </body>
 </html>

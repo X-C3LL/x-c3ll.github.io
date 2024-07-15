@@ -1,0 +1,540 @@
+<!DOCTYPE html>
+<html lang="en-US">
+  <head>
+    <meta charset="UTF-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+
+<!-- Begin Jekyll SEO tag v2.8.0 -->
+<title>Hacking a game to learn FRIDA basics (Pwn Adventure 3) | Doomsday Vault</title>
+<meta name="generator" content="Jekyll v3.9.5" />
+<meta property="og:title" content="Hacking a game to learn FRIDA basics (Pwn Adventure 3)" />
+<meta name="author" content="X-C3LL" />
+<meta property="og:locale" content="en_US" />
+<meta name="description" content="Learn the basic usage of Frida with this tutorial. Build your own cheat with Frida." />
+<meta property="og:description" content="Learn the basic usage of Frida with this tutorial. Build your own cheat with Frida." />
+<link rel="canonical" href="http://localhost:4000/posts/2018/07/05/Frida-Pwn-Adventure-3.html" />
+<meta property="og:url" content="http://localhost:4000/posts/2018/07/05/Frida-Pwn-Adventure-3.html" />
+<meta property="og:site_name" content="Doomsday Vault" />
+<meta property="og:type" content="article" />
+<meta property="article:published_time" content="2018-07-05T15:00:37+02:00" />
+<meta name="twitter:card" content="summary" />
+<meta property="twitter:title" content="Hacking a game to learn FRIDA basics (Pwn Adventure 3)" />
+<script type="application/ld+json">
+{"@context":"https://schema.org","@type":"BlogPosting","author":{"@type":"Person","name":"X-C3LL"},"dateModified":"2018-07-05T15:00:37+02:00","datePublished":"2018-07-05T15:00:37+02:00","description":"Learn the basic usage of Frida with this tutorial. Build your own cheat with Frida.","headline":"Hacking a game to learn FRIDA basics (Pwn Adventure 3)","mainEntityOfPage":{"@type":"WebPage","@id":"http://localhost:4000/posts/2018/07/05/Frida-Pwn-Adventure-3.html"},"publisher":{"@type":"Organization","logo":{"@type":"ImageObject","url":"http://localhost:4000/assets/img/logo.jpg"},"name":"X-C3LL"},"url":"http://localhost:4000/posts/2018/07/05/Frida-Pwn-Adventure-3.html"}</script>
+<!-- End Jekyll SEO tag -->
+
+    <link rel="stylesheet" href="/assets/css/style.css?v=c27a30cb27997bd3ed45ba5a77bd97bd27cbeb64">
+    <!--[if lt IE 9]>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html5shiv/3.7.3/html5shiv.min.js"></script>
+    <![endif]-->
+    <!-- start custom head snippets, customize with your own _includes/head-custom.html file -->
+
+<!-- Setup Google Analytics -->
+
+
+
+<!-- You can set your favicon here -->
+<!-- link rel="shortcut icon" type="image/x-icon" href="/favicon.ico" -->
+
+<!-- end custom head snippets -->
+
+  </head>
+  <body>
+    <div class="wrapper">
+      <header>
+
+        <h1><a href="http://localhost:4000/">Doomsday Vault</a></h1>
+
+        
+          <img src="/assets/img/logo.jpg" alt="Logo" />
+        
+
+        <p>X-C3LL's Personal Blog :)</p>
+
+
+        
+        <ul class="downloads">
+          <li><a href="https://twitter.com/TheXC3LL">@TheXC3LL<strong>Twitter</strong></a></li>
+          <li><a href="https://www.linkedin.com/in/thexc3ll/">thexc3ll<strong>LinkedIn</strong></a></li>
+          <li><a href="https://mastodon.social/@XC3LL">@XC3LL<strong>Mastodon</strong></a></li>
+        </ul>
+        
+               <nav>
+  <ul>
+    <li><a href="/">Home</a></li>
+  <li><a href="/about.html">About</a></li>
+    <li><a href="/cves.html">CVEs</a></li>
+    <li><a href="/tools.html">Tools</a></li>
+    <li><a href="/stuff.html">Slides & Articles</a></li>
+  <li><a href="/rss.xml">RSS</a>/<a href="/atom.xml">Atom</a></li>
+  
+</ul>
+</nav>
+      </header>
+      <section>
+
+      <small>5 July 2018</small>
+<h1>Hacking a game to learn FRIDA basics (Pwn Adventure 3)</h1>
+
+
+<p>        
+Recently I saw that <a href="https://www.youtube.com/channel/UClcE-kVhqyiHCcjYwcpfj9w">LiveOverflow</a> started a serie of videos about how to “hack” a game  released as a CTF challenge at Ghost in the Shellcode in 2015. After watching the two or three first videos I decided to use the same game to explain some aspects of <a href="https://www.frida.re/">Frida</a> and how this amazing project can save your ass at your work.</p>
+
+<p>        
+ So in this article we are going to build a <strong>cheat</strong> that will helps us in the game. Takeaways for the reader:</p>
+<ul>
+  <li>Hook functions easily with Frida</li>
+  <li>Read memory</li>
+  <li>Write memory</li>
+  <li>Call binary functions inside our hooks</li>
+  <li>Deal with clases &amp; structs</li>
+</ul>
+
+<p>        
+ First of all, please check <a href="https://github.com/LiveOverflow/PwnAdventure3">this link</a> in order to setup a server instance. If you have your server and your client ready, let’s play! <strong>:)</strong></p>
+
+<h2 id="0x00-the-first-step-recon">0x00 The first step: recon!</h2>
+<p>        
+The first step should be to launch the client, register a new player, and start exploring the world. After you spent some minutes moving around the map and checking the HUD (mana, life, items…) it is time to move on and get our hands dirty with the terminal. With the game running, do a <code class="language-plaintext highlighter-rouge">ps -aux</code> and check the name of the main binary used for the client: <strong>PwnAdventure3-Linux-Shipping</strong>. It is a dynamic linked binary with symbols (use <code class="language-plaintext highlighter-rouge">file</code> to see it), so is highly probable that the “core” of interesting things are located inside a shared object. We can use <code class="language-plaintext highlighter-rouge">ldd</code> to list easily all the shared objects used by the binary:</p>
+
+<div class="language-plaintext highlighter-rouge"><div class="highlight"><pre class="highlight"><code>mothra@kaiju:~/holydays|⇒  ldd $(locate PwnAdventure3-Linux-Shipping)
+        linux-vdso.so.1 (0x00007fff5e6c2000)
+        libpthread.so.0 =&gt; /lib/x86_64-linux-gnu/libpthread.so.0 (0x00007f5af4631000)
+        libdl.so.2 =&gt; /lib/x86_64-linux-gnu/libdl.so.2 (0x00007f5af442d000)
+        libGameLogic.so =&gt; /home/mothra/PwnAdventure3_Data/PwnAdventure3/PwnAdventure3/Binaries/Linux/libGameLogic.so (0x00007f5af3f61000)
+        librt.so.1 =&gt; /lib/x86_64-linux-gnu/librt.so.1 (0x00007f5af3d59000)
+        libopenal.so.1 =&gt; /home/mothra/PwnAdventure3_Data/PwnAdventure3/PwnAdventure3/Binaries/Linux/../../../Engine/Binaries/Linux/libopenal.so.1 (0x00007f5af3b02000)
+        libm.so.6 =&gt; /lib/x86_64-linux-gnu/libm.so.6 (0x00007f5af3801000)
+        libstdc++.so.6 =&gt; /usr/lib/x86_64-linux-gnu/libstdc++.so.6 (0x00007f5af34f6000)
+        libgcc_s.so.1 =&gt; /lib/x86_64-linux-gnu/libgcc_s.so.1 (0x00007f5af32e0000)
+        libc.so.6 =&gt; /lib/x86_64-linux-gnu/libc.so.6 (0x00007f5af2f35000)
+        /lib64/ld-linux-x86-64.so.2 (0x00007f5af484e000)
+        libssl.so.1.0.0 =&gt; /usr/lib/x86_64-linux-gnu/libssl.so.1.0.0 (0x00007f5af2cd4000)
+        libcrypto.so.1.0.0 =&gt; /usr/lib/x86_64-linux-gnu/libcrypto.so.1.0.0 (0x00007f5af28d7000)
+</code></pre></div></div>
+<p>        
+ Looks like “libGameLogic.so” is our target. As the game was programmed in C++, we have to deal with <a href="https://en.wikipedia.org/wiki/Name_mangling">name mangling</a>. In order to dump all the exports and translate the name we are going to use a small script that uses Frida and cxxfilt:</p>
+
+<div class="language-python highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c1"># Extract exports &amp; demangle it
+</span>
+<span class="kn">import</span> <span class="nn">frida</span>
+<span class="kn">import</span> <span class="nn">cxxfilt</span>
+<span class="kn">from</span> <span class="nn">__future__</span> <span class="kn">import</span> <span class="n">print_function</span>
+
+
+<span class="n">session</span> <span class="o">=</span> <span class="n">frida</span><span class="p">.</span><span class="n">attach</span><span class="p">(</span><span class="s">"PwnAdventure3-Linux-Shipping"</span><span class="p">)</span>
+<span class="n">script</span> <span class="o">=</span> <span class="n">session</span><span class="p">.</span><span class="n">create_script</span><span class="p">(</span><span class="s">"""
+    var exports = Module.enumerateExportsSync("libGameLogic.so");
+    for (var i = 0; i &lt; exports.length; i++) {
+        send(exports[i].name);
+    }
+"""</span><span class="p">)</span>
+
+<span class="k">def</span> <span class="nf">on_message</span><span class="p">(</span><span class="n">message</span><span class="p">,</span> <span class="n">data</span><span class="p">):</span>
+    <span class="k">print</span><span class="p">(</span><span class="n">message</span><span class="p">[</span><span class="s">"payload"</span><span class="p">]</span> <span class="o">+</span> <span class="s">" - "</span> <span class="o">+</span> <span class="n">cxxfilt</span><span class="p">.</span><span class="n">demangle</span><span class="p">(</span><span class="n">message</span><span class="p">[</span><span class="s">"payload"</span><span class="p">]))</span>
+
+<span class="n">script</span><span class="p">.</span><span class="n">on</span><span class="p">(</span><span class="s">'message'</span><span class="p">,</span> <span class="n">on_message</span><span class="p">)</span>
+<span class="n">script</span><span class="p">.</span><span class="n">load</span><span class="p">()</span>
+</code></pre></div></div>
+<p>        
+What are we doing here? We are attaching ourself to the running game process (PwnAdventure3-Linux-Shipping), then we create a script (JavaScript) where the main logic lies. From this JavaScript snippet we can access to the Frida API, and all the magic will come true <strong>:)</strong>: with <strong>Module.enumerateExportsSync(libname)</strong> we are going to retrieve an array with all the exports, then we iterate over the array and pass the information to the main python script using <strong>send()</strong>. In the python we just call <strong>cxxfilt.demangle()</strong> to demangle the name.</p>
+
+<p>        
+  Now we have a nice dump of useful information where we can perform searchs. For example let search for methods related with speed:</p>
+
+<div class="language-plaintext highlighter-rouge"><div class="highlight"><pre class="highlight"><code>mothra@kaiju:~/holydays|⇒  python demangle-exports.py &gt; demangled.txt
+mothra@kaiju:~/holydays|⇒  cat demangled.txt | grep -i speed
+_ZN6Player12GetJumpSpeedEv - Player::GetJumpSpeed()
+_ZThn168_N6Player12GetJumpSpeedEv - non-virtual thunk to Player::GetJumpSpeed()
+_ZN6Player15GetWalkingSpeedEv - Player::GetWalkingSpeed()
+_ZThn168_N6Player15GetWalkingSpeedEv - non-virtual thunk to Player::GetWalkingSpeed()
+</code></pre></div></div>
+
+<h2 id="0x01-talking-to-our-cheat">0x01 Talking to our cheat</h2>
+<p>        
+Usually we are not going to need to use the cheats all the time. Maybe we only want to increment our walking speed to travel long distances, but inside buildings we want the normal speed, or even to teleport ourself to another location we need to pass the coordinates as argument. To solve it, the best option is to use the game chat. Use our export dump to search for the “chat” word:</p>
+
+<div class="language-plaintext highlighter-rouge"><div class="highlight"><pre class="highlight"><code>mothra@kaiju:~/holydays|⇒  cat demangled.txt | grep -i chat
+_ZN6Player11ReceiveChatEPS_RKSs - Player::ReceiveChat(Player*, std::string const&amp;)
+_ZN11ClientWorld4ChatEP6PlayerRKSs - ClientWorld::Chat(Player*, std::string const&amp;)
+_ZN10LocalWorld13SendChatEventEP6PlayerRKSs - LocalWorld::SendChatEvent(Player*, std::string const&amp;)
+_ZN20GameServerConnection11OnChatEventEP6Player - GameServerConnection::OnChatEvent(Player*)
+_ZN11ServerWorld4ChatEP6PlayerRKSs - ServerWorld::Chat(Player*, std::string const&amp;)
+_ZN11ServerWorld13SendChatEventEP6PlayerRKSs - ServerWorld::SendChatEvent(Player*, std::string const&amp;)
+_ZN13ClientHandler4ChatEv - ClientHandler::Chat()
+_ZN11ClientWorld13SendChatEventEP6PlayerRKSs - ClientWorld::SendChatEvent(Player*, std::string const&amp;)
+_ZN6Player4ChatEPKc - Player::Chat(char const*)
+_ZN20GameServerConnection4ChatERKSs - GameServerConnection::Chat(std::string const&amp;)
+_ZN6Player11PerformChatERKSs - Player::PerformChat(std::string const&amp;)
+_ZThn168_N6Player4ChatEPKc - non-virtual thunk to Player::Chat(char const*)
+_ZN10LocalWorld4ChatEP6PlayerRKSs - LocalWorld::Chat(Player*, std::string const&amp;)
+</code></pre></div></div>
+
+<p>        
+That <strong>Player::Chat(char const*)</strong> looks really interesting as it receives a pointer to a string (maybe our chat message?). To check it, we are going to hook it and log to console the content of that string:</p>
+
+<div class="language-python highlighter-rouge"><div class="highlight"><pre class="highlight"><code> <span class="c1"># Log chat
+</span> <span class="kn">import</span> <span class="nn">frida</span>
+ <span class="kn">import</span> <span class="nn">sys</span>
+
+ <span class="n">session</span> <span class="o">=</span> <span class="n">frida</span><span class="p">.</span><span class="n">attach</span><span class="p">(</span><span class="s">"PwnAdventure3-Linux-Shipping"</span><span class="p">)</span>
+ <span class="n">script</span> <span class="o">=</span> <span class="n">session</span><span class="p">.</span><span class="n">create_script</span><span class="p">(</span><span class="s">"""
+         //Find "Player::Chat"
+         var chat = Module.findExportByName("libGameLogic.so", "_ZN6Player4ChatEPKc");
+         console.log("Player::Chat() at  address: " + chat);
+
+         Interceptor.attach(chat, {
+             onEnter: function (args) { // 0 =&gt; this; 1 =&gt; cont char* (our text)
+                var chatMsg = Memory.readCString(args[1]);
+                console.log("[Chat]: " + chatMsg);
+             }
+
+         });
+ """</span><span class="p">)</span>
+
+ <span class="n">script</span><span class="p">.</span><span class="n">load</span><span class="p">()</span>
+ <span class="n">sys</span><span class="p">.</span><span class="n">stdin</span><span class="p">.</span><span class="n">read</span><span class="p">()</span>
+</code></pre></div></div>
+<p>        
+Through <strong>Module.findExportByName(libname, function)</strong> we get the address of Player::Chat, and then we pass that address to the <strong>Interceptor</strong> in order to “attach” our hook. Now we can control two events: <strong>onEnter</strong> and <strong>onLeave</strong> (the names explain itself). Inside onEnter we can snoop the arguments (keep in mind that the first argument will be <a href="https://www.tutorialspoint.com/cplusplus/cpp_this_pointer.htm">this</a>, so the second argument is our pointer to string). Finally we just need to read the memory with <strong>Memory.readCString(pointer)</strong> to obtain the string. Execute it and type in the chat something:</p>
+
+<div class="language-plaintext highlighter-rouge"><div class="highlight"><pre class="highlight"><code>mothra@kaiju:~/holydays|⇒  python log-chat.py
+Player::Chat() at  address: 0x7f4ca4d4d850
+[Chat]: This Works
+</code></pre></div></div>
+<p>        
+At this point we can type commands inside the game chat and parse it to fire the actions programmed in our cheat. Oh, wait, what actions? Keep reading!</p>
+
+<h2 id="0x02-speed-not-the-film">0x02 Speed! (not the film)</h2>
+<p>        
+The first thing that we want to do is to move faster. As we stated before, the binary has symbols. Let’s dump the symbols related to the Player class:</p>
+<div class="language-plaintext highlighter-rouge"><div class="highlight"><pre class="highlight"><code>gdb -p  $(pidof PwnAdventure3-Linux-Shipping) --batch -ex "ptype Player" -ex "quit" &gt; Player.class
+</code></pre></div></div>
+<p>        
+Search for speed:</p>
+
+<div class="language-plaintext highlighter-rouge"><div class="highlight"><pre class="highlight"><code>mothra@kaiju:~/holydays|⇒  cat Player.class | grep -i speed
+    float m_walkingSpeed;
+    float m_jumpSpeed;
+    virtual float GetWalkingSpeed();
+    virtual float GetJumpSpeed();
+</code></pre></div></div>
+<p>        
+Interesting. We got a <strong>m_walkingSpeed</strong> (float) that looks like the baseline speed used for the walk action and a method called “GetWalkingSpeed()” that (if we cross-check with our demangled dump) corresponds to <strong>_ZN6Player15GetWalkingSpeedEv - Player::GetWalkingSpeed()</strong>. We can hook GetWalkingSpeed so every time it is called the value of m_walkingSpeed is overwritten with our desired speed.</p>
+
+<p>        
+To get the memory position of m_walkingSpeed I gonna calculate it as an offset from <code class="language-plaintext highlighter-rouge">this</code> when GetWalkingSpeed() is called (I saw this method in this post of FuzzySecurity -<a href="http://www.fuzzysecurity.com/tutorials/29.html">Application Introspection &amp; Hooking With Frida</a>-). With GDB it is easy peasy:</p>
+
+<div class="language-plaintext highlighter-rouge"><div class="highlight"><pre class="highlight"><code>mothra@kaiju:~/holydays|⇒  gdb -p  $(pidof PwnAdventure3-Linux-Shipping) --batch 
+\ -ex "b _ZN6Player15GetWalkingSpeedEv" --ex "c" --ex "print &amp;this-&gt;m_walkingSpeed" 
+\ -ex "print this" -ex "print (int)\$1-(int)\$2" -ex "quit" 2&gt;/dev/null | awk '/\$3/ {print $3 }'
+736
+</code></pre></div></div>
+<p>        
+So our roadmap now is: 1, hook ___ZN6Player15GetWalkingSpeedEv; 2, get <code class="language-plaintext highlighter-rouge">this</code> pointer at onEnter and add 736 (the offset) to get the position of m_walkingSpeed; 3, overwrite this float with our desired speed (first 9999).</p>
+
+<div class="language-javascript highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c1">// Find Player::GetWalkingSpeed()</span>
+         <span class="kd">var</span> <span class="nx">walkSpeed</span> <span class="o">=</span> <span class="nx">Module</span><span class="p">.</span><span class="nx">findExportByName</span><span class="p">(</span><span class="dl">"</span><span class="s2">libGameLogic.so</span><span class="dl">"</span><span class="p">,</span> <span class="dl">"</span><span class="s2">_ZN6Player15GetWalkingSpeedEv</span><span class="dl">"</span><span class="p">);</span>
+         <span class="nx">console</span><span class="p">.</span><span class="nx">log</span><span class="p">(</span><span class="dl">"</span><span class="s2">Player::GetWalkingSpeed() at address: </span><span class="dl">"</span> <span class="o">+</span> <span class="nx">walkSpeed</span><span class="p">);</span>
+
+         <span class="c1">// Check Speed</span>
+         <span class="nx">Interceptor</span><span class="p">.</span><span class="nx">attach</span><span class="p">(</span><span class="nx">walkSpeed</span><span class="p">,</span>
+             <span class="p">{</span>
+                 <span class="c1">// Get Player * this location</span>
+                 <span class="na">onEnter</span><span class="p">:</span> <span class="kd">function</span> <span class="p">(</span><span class="nx">args</span><span class="p">)</span> <span class="p">{</span>
+                     <span class="nx">console</span><span class="p">.</span><span class="nx">log</span><span class="p">(</span><span class="dl">"</span><span class="s2">Player at address: </span><span class="dl">"</span> <span class="o">+</span> <span class="nx">args</span><span class="p">[</span><span class="mi">0</span><span class="p">]);</span>
+                     <span class="k">this</span><span class="p">.</span><span class="nx">walkingSpeedAddr</span> <span class="o">=</span> <span class="nx">ptr</span><span class="p">(</span><span class="nx">args</span><span class="p">[</span><span class="mi">0</span><span class="p">]).</span><span class="nx">add</span><span class="p">(</span><span class="mi">736</span><span class="p">)</span> <span class="c1">// Offset m_walkingSpeed</span>
+                     <span class="nx">console</span><span class="p">.</span><span class="nx">log</span><span class="p">(</span><span class="dl">"</span><span class="s2">WalkingSpeed at address: </span><span class="dl">"</span> <span class="o">+</span> <span class="k">this</span><span class="p">.</span><span class="nx">walkingSpeedAddr</span><span class="p">);</span>
+                 <span class="p">},</span>
+</code></pre></div></div>
+<p>        
+Keep an eye on how we now have the memory address of m_walkingSpeed in  <strong>walkingSpeedAddr</strong>, so we can access to this value inside the onLeave event:</p>
+
+<div class="language-javascript highlighter-rouge"><div class="highlight"><pre class="highlight"><code>                 <span class="c1">// Get the return value and write the new value</span>
+                 <span class="nx">onLeave</span><span class="p">:</span> <span class="kd">function</span> <span class="p">(</span><span class="nx">retval</span><span class="p">)</span> <span class="p">{</span>
+                     <span class="nx">console</span><span class="p">.</span><span class="nx">log</span><span class="p">(</span><span class="dl">"</span><span class="s2">Walking Speed: </span><span class="dl">"</span> <span class="o">+</span> <span class="nx">Memory</span><span class="p">.</span><span class="nx">readFloat</span><span class="p">(</span><span class="k">this</span><span class="p">.</span><span class="nx">walkingSpeedAddr</span><span class="p">));</span>
+                     <span class="nx">Memory</span><span class="p">.</span><span class="nx">writeFloat</span><span class="p">(</span><span class="k">this</span><span class="p">.</span><span class="nx">walkingSpeedAddr</span><span class="p">,</span> <span class="mi">9999</span><span class="p">);</span>
+
+                 <span class="p">}</span>
+             <span class="p">});</span>
+</code></pre></div></div>
+<p>        
+As we did before with readCString, now we are using <strong>Memory.readFloat</strong> to read the original speed value (200) and log it in the terminal. Lastly, we write the new walking speed as a float (9999). Launch it and move around the map. Crazy speed is crazy!</p>
+
+<p>        
+As we had our routine to get the chat messages, we can use it to regulate the speed with <strong>!wspeed_on NUMBER</strong> and <strong>!wspeed_off</strong>:</p>
+<div class="language-javascript highlighter-rouge"><div class="highlight"><pre class="highlight"><code>
+<span class="nx">script</span> <span class="o">=</span> <span class="nx">session</span><span class="p">.</span><span class="nx">create_script</span><span class="p">(</span><span class="dl">"""</span><span class="s2">
+        // Global Values
+        var Player = {
+            m_walkingSpeed : 200,
+        };
+
+        // Cheat status
+        var cheatStatus = {
+            walkingSpeed : 0,
+        };
+
+        // Chat Helper
+        function chatHelper(msg) {
+            var token = msg.split(</span><span class="dl">"</span> <span class="dl">"</span><span class="s2">);
+            if (token[0] === </span><span class="dl">"</span><span class="o">!</span><span class="nx">wspeed_on</span><span class="dl">"</span><span class="s2">) {
+                Player.m_walkingSpeed = parseInt(token[1]);
+                cheatStatus.walkingSpeed = 1;
+                console.log(</span><span class="dl">"</span><span class="p">[</span><span class="nx">CHEAT</span><span class="p">]:</span> <span class="nx">Walking</span> <span class="nx">Speed</span> <span class="nx">Enabled</span> <span class="p">(</span><span class="dl">"</span><span class="s2"> + token[1] + </span><span class="dl">"</span><span class="p">)</span><span class="dl">"</span><span class="s2">);
+            }
+            if (token[0] === </span><span class="dl">"</span><span class="o">!</span><span class="nx">wspeed_off</span><span class="dl">"</span><span class="s2">) {
+                Player.m_walkingSpeed = 200;
+                cheatStatus.walkingSpeed = 0;
+                console.log(</span><span class="dl">"</span><span class="p">[</span><span class="nx">CHEAT</span><span class="p">]:</span> <span class="nx">Walking</span> <span class="nx">Speed</span> <span class="nx">Disabled</span> <span class="p">(</span><span class="mi">200</span><span class="p">)</span><span class="dl">"</span><span class="s2">);
+            }
+        }
+
+
+        //Find </span><span class="dl">"</span><span class="nx">Player</span><span class="p">::</span><span class="nx">Chat</span><span class="dl">"</span><span class="s2">
+        var chat = Module.findExportByName(</span><span class="dl">"</span><span class="nx">libGameLogic</span><span class="p">.</span><span class="nx">so</span><span class="dl">"</span><span class="s2">, </span><span class="dl">"</span><span class="nx">_ZN6Player4ChatEPKc</span><span class="dl">"</span><span class="s2">);
+        console.log(</span><span class="dl">"</span><span class="nx">Player</span><span class="p">::</span><span class="nx">Chat</span><span class="p">()</span> <span class="nx">at</span>  <span class="nx">address</span><span class="p">:</span> <span class="dl">"</span><span class="s2"> + chat);
+
+        // Add our logger
+        Interceptor.attach(chat, {
+            onEnter: function (args) { // 0 =&gt; this; 1 =&gt; cont char* (our text)
+               var chatMsg = Memory.readCString(args[1]);
+               console.log(</span><span class="dl">"</span><span class="p">[</span><span class="nx">Chat</span><span class="p">]:</span> <span class="dl">"</span><span class="s2"> + chatMsg);
+               chatHelper(chatMsg);
+            }
+
+        });
+
+        // Find Player::GetWalkingSpeed()
+        var walkSpeed = Module.findExportByName(</span><span class="dl">"</span><span class="nx">libGameLogic</span><span class="p">.</span><span class="nx">so</span><span class="dl">"</span><span class="s2">, </span><span class="dl">"</span><span class="nx">_ZN6Player15GetWalkingSpeedEv</span><span class="dl">"</span><span class="s2">);
+        console.log(</span><span class="dl">"</span><span class="nx">Player</span><span class="p">::</span><span class="nx">GetWalkingSpeed</span><span class="p">()</span> <span class="nx">at</span> <span class="nx">address</span><span class="p">:</span> <span class="dl">"</span><span class="s2"> + walkSpeed);
+
+        // Check Speed
+        Interceptor.attach(walkSpeed,
+            {
+                // Get Player * this location
+                onEnter: function (args) {
+                    //console.log(</span><span class="dl">"</span><span class="nx">Player</span> <span class="nx">at</span> <span class="nx">address</span><span class="p">:</span> <span class="dl">"</span><span class="s2"> + args[0]);
+                    this.walkingSpeedAddr = ptr(args[0]).add(736) // Offset m_walkingSpeed
+                    //console.log(</span><span class="dl">"</span><span class="nx">WalkingSpeed</span> <span class="nx">at</span> <span class="nx">address</span><span class="p">:</span> <span class="dl">"</span><span class="s2"> + this.walkingSpeedAddr);
+                },
+
+                // Get the return value and write the new speed
+                onLeave: function (retval) {
+                    if (Memory.readFloat(this.walkingSpeedAddr) != Player.m_walkingSpeed &amp;&amp; cheatStatus.walkingSpeed == 0) {
+                        Memory.writeFloat(this.walkingSpeedAddr, 200);
+                    }
+                    if (cheatStatus.walkingSpeed == 1) {
+                        Memory.writeFloat(this.walkingSpeedAddr, Player.m_walkingSpeed);
+                    }
+                }
+            });
+
+</span><span class="dl">"""</span><span class="p">)</span>
+</code></pre></div></div>
+
+<h2 id="0x03-tv-transportation-i-mean-teletransportation">0x03 TV-Transportation, I mean Teletransportation</h2>
+<p>        
+A nice walking speed is helpful to explore big map areas, but the capacity of spawn ourself in other point of the map is cooler. Let’s search again our demangled functions:</p>
+
+<div class="language-plaintext highlighter-rouge"><div class="highlight"><pre class="highlight"><code>mothra@kaiju:~/holydays|⇒  cat demangled.txt| grep -i position
+_ZN11ServerWorld23SendActorPositionEventsEP6Player - ServerWorld::SendActorPositionEvents(Player*)
+_ZN6Player25ShouldSendPositionUpdatesEv - Player::ShouldSendPositionUpdates()
+_ZN5Actor28ShouldReceivePositionUpdatesEv - Actor::ShouldReceivePositionUpdates()
+_ZN7AIActor25ShouldSendPositionUpdatesEv - AIActor::ShouldSendPositionUpdates()
+_ZN5Actor28SetRemotePositionAndRotationERK7Vector3RK8Rotation - Actor::SetRemotePositionAndRotation(Vector3 const&amp;, Rotation const&amp;)
+_ZN20GameServerConnection26OnPositionAndVelocityEventEP6Player - GameServerConnection::OnPositionAndVelocityEvent(Player*)
+_ZN5Actor11GetPositionEv - Actor::GetPosition()
+_ZN4Drop25ShouldSendPositionUpdatesEv - Drop::ShouldSendPositionUpdates()
+_ZN6Player28ShouldReceivePositionUpdatesEv - Player::ShouldReceivePositionUpdates()
+_ZN10LocalWorld23SendActorPositionEventsEP6Player - LocalWorld::SendActorPositionEvents(Player*)
+_ZN6Player15GetLookPositionEv - Player::GetLookPosition()
+_ZN20GameServerConnection15OnPositionEventEP6Player - GameServerConnection::OnPositionEvent(Player*)
+_ZN5Actor15GetLookPositionEv - Actor::GetLookPosition()
+_ZN11ClientWorld23SendActorPositionEventsEP6Player - ClientWorld::SendActorPositionEvents(Player*)
+_ZN20GameServerConnection21OnPlayerPositionEventEP6Player - GameServerConnection::OnPlayerPositionEvent(Player*)
+_ZN5Actor21GetProjectilePositionEv - Actor::GetProjectilePosition()
+_ZN10Projectile25ShouldSendPositionUpdatesEv - Projectile::ShouldSendPositionUpdates()
+_ZN5Actor25ShouldSendPositionUpdatesEv - Actor::ShouldSendPositionUpdates()
+_ZN5Actor25InterpolateRemotePositionEf - Actor::InterpolateRemotePosition(float)
+_ZN7AIActor28ShouldReceivePositionUpdatesEv - AIActor::ShouldReceivePositionUpdates()
+_ZN5Actor11SetPositionERK7Vector3 - Actor::SetPosition(Vector3 const&amp;)
+</code></pre></div></div>
+<p>        
+A wild <strong>SetPosition</strong> appeared! It has as argument a Vector3, which is the coordinates in the axis x, y &amp; z, so this SetPosition is our key to the teleport.</p>
+
+<p>        
+In Frida we can call functions located inside the binary though <strong>NativeFunction</strong>. We need to know:</p>
+<ul>
+  <li>Address of the function we want to call</li>
+  <li>Return type</li>
+  <li>Argument number and type</li>
+</ul>
+
+<p>        
+As arguments we need to pass the pointer to <code class="language-plaintext highlighter-rouge">this</code> and our Vector3. The first point is easy to solve: just take it from the chat hook when we call the “!tp” command. To solve the second requirement we are going to ask Frida to allocate a small buffer where we are going to write the floats with the information of x, y and z, and then pass the pointer to this buffer to SetPosition.</p>
+
+<div class="language-javascript highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c1">//Teleport</span>
+        <span class="kd">var</span> <span class="nx">setPositionAddr</span> <span class="o">=</span> <span class="nx">Module</span><span class="p">.</span><span class="nx">findExportByName</span><span class="p">(</span><span class="dl">"</span><span class="s2">libGameLogic.so</span><span class="dl">"</span><span class="p">,</span> <span class="dl">"</span><span class="s2">_ZN5Actor11SetPositionERK7Vector3</span><span class="dl">"</span><span class="p">);</span>
+        <span class="kd">var</span> <span class="nx">setPosition</span> <span class="o">=</span> <span class="k">new</span> <span class="nx">NativeFunction</span><span class="p">(</span><span class="nx">setPositionAddr</span><span class="p">,</span> <span class="dl">'</span><span class="s1">void</span><span class="dl">'</span><span class="p">,</span> <span class="p">[</span><span class="dl">'</span><span class="s1">pointer</span><span class="dl">'</span><span class="p">,</span> <span class="dl">'</span><span class="s1">pointer</span><span class="dl">'</span><span class="p">]);</span>
+        <span class="kd">var</span> <span class="nx">Vector3</span> <span class="o">=</span> <span class="nx">Memory</span><span class="p">.</span><span class="nx">alloc</span><span class="p">(</span><span class="mi">16</span><span class="p">);</span>
+
+        <span class="kd">function</span> <span class="nx">teleport</span><span class="p">(</span><span class="nx">thisReference</span><span class="p">,</span> <span class="nx">x</span><span class="p">,</span> <span class="nx">y</span><span class="p">,</span> <span class="nx">z</span><span class="p">)</span> <span class="p">{</span>
+            <span class="nx">Memory</span><span class="p">.</span><span class="nx">writeFloat</span><span class="p">(</span><span class="nx">Vector3</span><span class="p">,</span> <span class="nx">x</span><span class="p">);</span>
+            <span class="nx">Memory</span><span class="p">.</span><span class="nx">writeFloat</span><span class="p">(</span><span class="nx">ptr</span><span class="p">(</span><span class="nx">Vector3</span><span class="p">).</span><span class="nx">add</span><span class="p">(</span><span class="mi">4</span><span class="p">),</span> <span class="nx">y</span><span class="p">);</span>
+            <span class="nx">Memory</span><span class="p">.</span><span class="nx">writeFloat</span><span class="p">(</span><span class="nx">ptr</span><span class="p">(</span><span class="nx">Vector3</span><span class="p">).</span><span class="nx">add</span><span class="p">(</span><span class="mi">8</span><span class="p">),</span> <span class="nx">z</span><span class="p">);</span>
+            <span class="nx">setPosition</span><span class="p">(</span><span class="nx">thisReference</span><span class="p">,</span> <span class="nx">Vector3</span><span class="p">);</span>
+        <span class="p">}</span>
+
+</code></pre></div></div>
+<p>        
+The allocation is easily made calling <strong>Memory.alloc(SIZE)</strong>. Then with <strong>Memory.writeFloat</strong> we write the values of our desired coordinates (x,y,z) and lastly we call the function. The whole script, including the chat parser, should looks something like this:</p>
+
+<div class="language-javascript highlighter-rouge"><div class="highlight"><pre class="highlight"><code>        <span class="c1">// Global Values</span>
+        <span class="kd">var</span> <span class="nx">Player</span> <span class="o">=</span> <span class="p">{</span>
+            <span class="na">m_walkingSpeed</span> <span class="p">:</span> <span class="mi">200</span><span class="p">,</span>
+        <span class="p">};</span>
+
+        <span class="c1">// Cheat status</span>
+        <span class="kd">var</span> <span class="nx">cheatStatus</span> <span class="o">=</span> <span class="p">{</span>
+            <span class="na">walkingSpeed</span> <span class="p">:</span> <span class="mi">0</span><span class="p">,</span>
+        <span class="p">};</span>
+
+        <span class="c1">//Teleport</span>
+        <span class="kd">var</span> <span class="nx">setPositionAddr</span> <span class="o">=</span> <span class="nx">Module</span><span class="p">.</span><span class="nx">findExportByName</span><span class="p">(</span><span class="dl">"</span><span class="s2">libGameLogic.so</span><span class="dl">"</span><span class="p">,</span> <span class="dl">"</span><span class="s2">_ZN5Actor11SetPositionERK7Vector3</span><span class="dl">"</span><span class="p">);</span>
+        <span class="kd">var</span> <span class="nx">setPosition</span> <span class="o">=</span> <span class="k">new</span> <span class="nx">NativeFunction</span><span class="p">(</span><span class="nx">setPositionAddr</span><span class="p">,</span> <span class="dl">'</span><span class="s1">void</span><span class="dl">'</span><span class="p">,</span> <span class="p">[</span><span class="dl">'</span><span class="s1">pointer</span><span class="dl">'</span><span class="p">,</span> <span class="dl">'</span><span class="s1">pointer</span><span class="dl">'</span><span class="p">]);</span>
+        <span class="kd">var</span> <span class="nx">Vector3</span> <span class="o">=</span> <span class="nx">Memory</span><span class="p">.</span><span class="nx">alloc</span><span class="p">(</span><span class="mi">16</span><span class="p">);</span>
+
+        <span class="kd">function</span> <span class="nx">teleport</span><span class="p">(</span><span class="nx">thisReference</span><span class="p">,</span> <span class="nx">x</span><span class="p">,</span> <span class="nx">y</span><span class="p">,</span> <span class="nx">z</span><span class="p">)</span> <span class="p">{</span>
+            <span class="nx">Memory</span><span class="p">.</span><span class="nx">writeFloat</span><span class="p">(</span><span class="nx">Vector3</span><span class="p">,</span> <span class="nx">x</span><span class="p">);</span>
+            <span class="nx">Memory</span><span class="p">.</span><span class="nx">writeFloat</span><span class="p">(</span><span class="nx">ptr</span><span class="p">(</span><span class="nx">Vector3</span><span class="p">).</span><span class="nx">add</span><span class="p">(</span><span class="mi">4</span><span class="p">),</span> <span class="nx">y</span><span class="p">);</span>
+            <span class="nx">Memory</span><span class="p">.</span><span class="nx">writeFloat</span><span class="p">(</span><span class="nx">ptr</span><span class="p">(</span><span class="nx">Vector3</span><span class="p">).</span><span class="nx">add</span><span class="p">(</span><span class="mi">8</span><span class="p">),</span> <span class="nx">z</span><span class="p">);</span>
+            <span class="nx">setPosition</span><span class="p">(</span><span class="nx">thisReference</span><span class="p">,</span> <span class="nx">Vector3</span><span class="p">);</span>
+        <span class="p">}</span>
+
+
+        <span class="c1">// Chat Helper</span>
+        <span class="kd">function</span> <span class="nx">chatHelper</span><span class="p">(</span><span class="nx">msg</span><span class="p">,</span> <span class="nx">thisReference</span><span class="p">)</span> <span class="p">{</span>
+            <span class="kd">var</span> <span class="nx">token</span> <span class="o">=</span> <span class="nx">msg</span><span class="p">.</span><span class="nx">split</span><span class="p">(</span><span class="dl">"</span><span class="s2"> </span><span class="dl">"</span><span class="p">);</span>
+            <span class="k">if</span> <span class="p">(</span><span class="nx">token</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">===</span> <span class="dl">"</span><span class="s2">!wspeed_on</span><span class="dl">"</span><span class="p">)</span> <span class="p">{</span>
+                <span class="nx">Player</span><span class="p">.</span><span class="nx">m_walkingSpeed</span> <span class="o">=</span> <span class="nb">parseInt</span><span class="p">(</span><span class="nx">token</span><span class="p">[</span><span class="mi">1</span><span class="p">]);</span>
+                <span class="nx">cheatStatus</span><span class="p">.</span><span class="nx">walkingSpeed</span> <span class="o">=</span> <span class="mi">1</span><span class="p">;</span>
+                <span class="nx">console</span><span class="p">.</span><span class="nx">log</span><span class="p">(</span><span class="dl">"</span><span class="s2">[CHEAT]: Walking Speed Enabled (</span><span class="dl">"</span> <span class="o">+</span> <span class="nx">token</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span> <span class="o">+</span> <span class="dl">"</span><span class="s2">)</span><span class="dl">"</span><span class="p">);</span>
+            <span class="p">}</span>
+            <span class="k">if</span> <span class="p">(</span><span class="nx">token</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">===</span> <span class="dl">"</span><span class="s2">!wspeed_off</span><span class="dl">"</span><span class="p">)</span> <span class="p">{</span>
+                <span class="nx">Player</span><span class="p">.</span><span class="nx">m_walkingSpeed</span> <span class="o">=</span> <span class="mi">200</span><span class="p">;</span>
+                <span class="nx">cheatStatus</span><span class="p">.</span><span class="nx">walkingSpeed</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span>
+                <span class="nx">console</span><span class="p">.</span><span class="nx">log</span><span class="p">(</span><span class="dl">"</span><span class="s2">[CHEAT]: Walking Speed Disabled (200)</span><span class="dl">"</span><span class="p">);</span>
+            <span class="p">}</span>
+            <span class="k">if</span> <span class="p">(</span><span class="nx">token</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">===</span> <span class="dl">"</span><span class="s2">!tp</span><span class="dl">"</span><span class="p">)</span> <span class="p">{</span>
+                <span class="nx">console</span><span class="p">.</span><span class="nx">log</span><span class="p">(</span><span class="dl">"</span><span class="s2">[CHEAT]: Teleporting to </span><span class="dl">"</span> <span class="o">+</span> <span class="nx">token</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span> <span class="o">+</span> <span class="dl">"</span><span class="s2"> </span><span class="dl">"</span> <span class="o">+</span> <span class="nx">token</span><span class="p">[</span><span class="mi">2</span><span class="p">]</span> <span class="o">+</span> <span class="dl">"</span><span class="s2"> </span><span class="dl">"</span><span class="o">+</span> <span class="nx">token</span><span class="p">[</span><span class="mi">3</span><span class="p">]);</span>
+                <span class="nx">teleport</span><span class="p">(</span><span class="nx">thisReference</span><span class="p">,</span> <span class="nb">parseInt</span><span class="p">(</span><span class="nx">token</span><span class="p">[</span><span class="mi">1</span><span class="p">]),</span> <span class="nb">parseInt</span><span class="p">(</span><span class="nx">token</span><span class="p">[</span><span class="mi">2</span><span class="p">]),</span> <span class="nb">parseInt</span><span class="p">(</span><span class="nx">token</span><span class="p">[</span><span class="mi">3</span><span class="p">]));</span>
+         <span class="p">}</span>
+        <span class="p">}</span>
+
+
+        <span class="c1">//Find "Player::Chat"</span>
+        <span class="kd">var</span> <span class="nx">chat</span> <span class="o">=</span> <span class="nx">Module</span><span class="p">.</span><span class="nx">findExportByName</span><span class="p">(</span><span class="dl">"</span><span class="s2">libGameLogic.so</span><span class="dl">"</span><span class="p">,</span> <span class="dl">"</span><span class="s2">_ZN6Player4ChatEPKc</span><span class="dl">"</span><span class="p">);</span>
+        <span class="nx">console</span><span class="p">.</span><span class="nx">log</span><span class="p">(</span><span class="dl">"</span><span class="s2">Player::Chat() at  address: </span><span class="dl">"</span> <span class="o">+</span> <span class="nx">chat</span><span class="p">);</span>
+
+        <span class="c1">// Add our logger</span>
+        <span class="nx">Interceptor</span><span class="p">.</span><span class="nx">attach</span><span class="p">(</span><span class="nx">chat</span><span class="p">,</span> <span class="p">{</span>
+            <span class="na">onEnter</span><span class="p">:</span> <span class="kd">function</span> <span class="p">(</span><span class="nx">args</span><span class="p">)</span> <span class="p">{</span> <span class="c1">// 0 =&gt; this; 1 =&gt; cont char* (our text)</span>
+               <span class="kd">var</span> <span class="nx">chatMsg</span> <span class="o">=</span> <span class="nx">Memory</span><span class="p">.</span><span class="nx">readCString</span><span class="p">(</span><span class="nx">args</span><span class="p">[</span><span class="mi">1</span><span class="p">]);</span>
+               <span class="nx">console</span><span class="p">.</span><span class="nx">log</span><span class="p">(</span><span class="dl">"</span><span class="s2">[Chat]: </span><span class="dl">"</span> <span class="o">+</span> <span class="nx">chatMsg</span><span class="p">);</span>
+               <span class="nx">chatHelper</span><span class="p">(</span><span class="nx">chatMsg</span><span class="p">,</span> <span class="nx">args</span><span class="p">[</span><span class="mi">0</span><span class="p">]);</span>
+            <span class="p">}</span>
+
+        <span class="p">});</span>
+
+        <span class="c1">// Find Player::GetWalkingSpeed()</span>
+        <span class="kd">var</span> <span class="nx">walkSpeed</span> <span class="o">=</span> <span class="nx">Module</span><span class="p">.</span><span class="nx">findExportByName</span><span class="p">(</span><span class="dl">"</span><span class="s2">libGameLogic.so</span><span class="dl">"</span><span class="p">,</span> <span class="dl">"</span><span class="s2">_ZN6Player15GetWalkingSpeedEv</span><span class="dl">"</span><span class="p">);</span>
+        <span class="nx">console</span><span class="p">.</span><span class="nx">log</span><span class="p">(</span><span class="dl">"</span><span class="s2">Player::GetWalkingSpeed() at address: </span><span class="dl">"</span> <span class="o">+</span> <span class="nx">walkSpeed</span><span class="p">);</span>
+
+        <span class="c1">// Check Speed</span>
+        <span class="nx">Interceptor</span><span class="p">.</span><span class="nx">attach</span><span class="p">(</span><span class="nx">walkSpeed</span><span class="p">,</span>
+            <span class="p">{</span>
+                <span class="c1">// Get Player * this location</span>
+                <span class="na">onEnter</span><span class="p">:</span> <span class="kd">function</span> <span class="p">(</span><span class="nx">args</span><span class="p">)</span> <span class="p">{</span>
+                    <span class="c1">//console.log("Player at address: " + args[0]);</span>
+                    <span class="k">this</span><span class="p">.</span><span class="nx">walkingSpeedAddr</span> <span class="o">=</span> <span class="nx">ptr</span><span class="p">(</span><span class="nx">args</span><span class="p">[</span><span class="mi">0</span><span class="p">]).</span><span class="nx">add</span><span class="p">(</span><span class="mi">736</span><span class="p">)</span> <span class="c1">// Offset m_walkingSpeed</span>
+                    <span class="c1">//console.log("WalkingSpeed at address: " + this.walkingSpeedAddr);</span>
+                <span class="p">},</span>
+
+                <span class="c1">// Get the return value</span>
+                <span class="na">onLeave</span><span class="p">:</span> <span class="kd">function</span> <span class="p">(</span><span class="nx">retval</span><span class="p">)</span> <span class="p">{</span>
+                    <span class="k">if</span> <span class="p">(</span><span class="nx">Memory</span><span class="p">.</span><span class="nx">readFloat</span><span class="p">(</span><span class="k">this</span><span class="p">.</span><span class="nx">walkingSpeedAddr</span><span class="p">)</span> <span class="o">!=</span> <span class="nx">Player</span><span class="p">.</span><span class="nx">m_walkingSpeed</span> <span class="o">&amp;&amp;</span> <span class="nx">cheatStatus</span><span class="p">.</span><span class="nx">walkingSpeed</span> <span class="o">==</span> <span class="mi">0</span><span class="p">)</span> <span class="p">{</span>
+                        <span class="nx">Memory</span><span class="p">.</span><span class="nx">writeFloat</span><span class="p">(</span><span class="k">this</span><span class="p">.</span><span class="nx">walkingSpeedAddr</span><span class="p">,</span> <span class="mi">200</span><span class="p">);</span>
+                    <span class="p">}</span>
+                    <span class="k">if</span> <span class="p">(</span><span class="nx">cheatStatus</span><span class="p">.</span><span class="nx">walkingSpeed</span> <span class="o">==</span> <span class="mi">1</span><span class="p">)</span> <span class="p">{</span>
+                        <span class="nx">Memory</span><span class="p">.</span><span class="nx">writeFloat</span><span class="p">(</span><span class="k">this</span><span class="p">.</span><span class="nx">walkingSpeedAddr</span><span class="p">,</span> <span class="nx">Player</span><span class="p">.</span><span class="nx">m_walkingSpeed</span><span class="p">);</span>
+                    <span class="p">}</span>
+                <span class="p">}</span>
+            <span class="p">});</span>
+</code></pre></div></div>
+
+<h2 id="0x04-manna-is-falling-from-the-sky">0x04 Manna is falling from the sky</h2>
+
+<p>        
+<strong>UPDATE (8/JUL/2018): The mana is getting checked via server, so I failed hard here. I got tricked because we are only setting the value in the HUD :(</strong></p>
+
+<p>        
+If you walk to the direction of the sun (over the sea) at some point you will find a island with Cows and a quest will be activated. Without making any big spoiler, in this island an NPC will give you a weapon. This weapon wastes mana, and we do not like to waste it (even if it is regenerated fastly). We want our mana always at the max value!</p>
+
+<div class="language-plaintext highlighter-rouge"><div class="highlight"><pre class="highlight"><code>mothra@kaiju:~/holydays|⇒  cat Player.class| grep -i mana
+    int32_t m_mana;
+    float m_manaRegenTimer;
+    virtual int32_t GetMana();
+    virtual bool UseMana(int32_t);
+    void PerformSetMana(int32_t);
+</code></pre></div></div>
+<p>        
+This situation is almost the same that we saw before with speed, so our modus operandi will be the same. Calcualte the offset of <strong>m_mana</strong> and then hook <strong>GetMana</strong> to overwrite the value to 100:</p>
+
+<div class="language-plaintext highlighter-rouge"><div class="highlight"><pre class="highlight"><code>mothra@kaiju:~/holydays|⇒  gdb -p  $(pidof PwnAdventure3-Linux-Shipping) --batch 
+\ -ex "set verbose off" -ex "b _ZN6Player15GetWalkingSpeedEv" --ex "c" --ex "print &amp;this-&gt;m_mana"
+\ -ex "print this" -ex "print (int)\$1-(int)\$2" -ex "quit" 2&gt;/dev/null | awk '/\$3/ {print $3 }'
+
+544
+</code></pre></div></div>
+<p>        
+Hook it…</p>
+<div class="language-javascript highlighter-rouge"><div class="highlight"><pre class="highlight"><code>        <span class="kd">var</span> <span class="nx">getMana</span> <span class="o">=</span> <span class="nx">Module</span><span class="p">.</span><span class="nx">findExportByName</span><span class="p">(</span><span class="dl">"</span><span class="s2">libGameLogic.so</span><span class="dl">"</span><span class="p">,</span> <span class="dl">"</span><span class="s2">_ZN6Player7GetManaEv</span><span class="dl">"</span><span class="p">);</span>
+        <span class="nx">console</span><span class="p">.</span><span class="nx">log</span><span class="p">(</span><span class="dl">"</span><span class="s2">Player::GetMana at address: </span><span class="dl">"</span> <span class="o">+</span> <span class="nx">getMana</span><span class="p">);</span>
+        <span class="nx">Interceptor</span><span class="p">.</span><span class="nx">attach</span><span class="p">(</span><span class="nx">getMana</span><span class="p">,</span>
+        <span class="p">{</span>
+            <span class="na">onEnter</span><span class="p">:</span> <span class="kd">function</span> <span class="p">(</span><span class="nx">args</span><span class="p">)</span> <span class="p">{</span>
+                <span class="k">if</span> <span class="p">(</span><span class="nx">cheatStatus</span><span class="p">.</span><span class="nx">infiniteMana</span> <span class="o">==</span> <span class="mi">1</span><span class="p">)</span> <span class="p">{</span>
+                    <span class="nx">m_manaAddr</span> <span class="o">=</span> <span class="nx">ptr</span><span class="p">(</span><span class="nx">args</span><span class="p">[</span><span class="mi">0</span><span class="p">]).</span><span class="nx">add</span><span class="p">(</span><span class="mi">544</span><span class="p">)</span> <span class="c1">// Offset m_mana</span>
+                    <span class="nx">Memory</span><span class="p">.</span><span class="nx">writeInt</span><span class="p">(</span><span class="nx">m_manaAddr</span><span class="p">,</span> <span class="mi">100</span><span class="p">);</span>
+                <span class="p">}</span>
+            <span class="p">}</span>
+        <span class="p">}</span>
+        <span class="p">);</span>
+</code></pre></div></div>
+<p>        
+Keep pressed the fire button and check how your mana never get low!</p>
+
+<h2 id="0x05-final-words">0x05 Final Words</h2>
+<p>        
+Using Frida to cheat in this game is just a funny way to explain the basics concepts around this framework. If you know better ways (or how to optimize the code) feel free to ping me at twitter <a href="https://twitter.com/thexc3ll">@TheXC3LL</a>. The final cheat code can be found in my github <a href="https://github.com/X-C3LL/snippets/blob/master/PwnAdventure3-cheat.py">PwnAdventure3-cheat.py</a>.</p>
+
+<p>        
+ If you find typo or errors, contact me too <strong>:P</strong>.</p>
+
+
+
+
+
+      </section>
+      <footer>
+        
+        <p>This project is maintained by <a href="https://github.com/pages-themes">pages-themes</a></p>
+        
+        <p><small>Hosted on GitHub Pages &mdash; Theme by <a href="https://github.com/orderedlist">orderedlist</a></small></p>
+      </footer>
+    </div>
+    <script src="/assets/js/scale.fix.js"></script>
+  </body>
+</html>

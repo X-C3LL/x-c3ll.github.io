@@ -1,0 +1,284 @@
+<!DOCTYPE html>
+<html lang="en-US">
+  <head>
+    <meta charset="UTF-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+
+<!-- Begin Jekyll SEO tag v2.8.0 -->
+<title>Isolating the logic of an encrypted protocol with LIEF and kaitai | Doomsday Vault</title>
+<meta name="generator" content="Jekyll v3.9.5" />
+<meta property="og:title" content="Isolating the logic of an encrypted protocol with LIEF and kaitai" />
+<meta name="author" content="X-C3LL" />
+<meta property="og:locale" content="en_US" />
+<meta name="description" content="Article describing how we used LIEF to isolate target functions and kaitai to describe the protocol." />
+<meta property="og:description" content="Article describing how we used LIEF to isolate target functions and kaitai to describe the protocol." />
+<link rel="canonical" href="http://localhost:4000/posts/2019/11/01/blackbox-lief-kaitai.html" />
+<meta property="og:url" content="http://localhost:4000/posts/2019/11/01/blackbox-lief-kaitai.html" />
+<meta property="og:site_name" content="Doomsday Vault" />
+<meta property="og:type" content="article" />
+<meta property="article:published_time" content="2019-11-01T13:00:00+01:00" />
+<meta name="twitter:card" content="summary" />
+<meta property="twitter:title" content="Isolating the logic of an encrypted protocol with LIEF and kaitai" />
+<script type="application/ld+json">
+{"@context":"https://schema.org","@type":"BlogPosting","author":{"@type":"Person","name":"X-C3LL"},"dateModified":"2019-11-01T13:00:00+01:00","datePublished":"2019-11-01T13:00:00+01:00","description":"Article describing how we used LIEF to isolate target functions and kaitai to describe the protocol.","headline":"Isolating the logic of an encrypted protocol with LIEF and kaitai","mainEntityOfPage":{"@type":"WebPage","@id":"http://localhost:4000/posts/2019/11/01/blackbox-lief-kaitai.html"},"publisher":{"@type":"Organization","logo":{"@type":"ImageObject","url":"http://localhost:4000/assets/img/logo.jpg"},"name":"X-C3LL"},"url":"http://localhost:4000/posts/2019/11/01/blackbox-lief-kaitai.html"}</script>
+<!-- End Jekyll SEO tag -->
+
+    <link rel="stylesheet" href="/assets/css/style.css?v=c27a30cb27997bd3ed45ba5a77bd97bd27cbeb64">
+    <!--[if lt IE 9]>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html5shiv/3.7.3/html5shiv.min.js"></script>
+    <![endif]-->
+    <!-- start custom head snippets, customize with your own _includes/head-custom.html file -->
+
+<!-- Setup Google Analytics -->
+
+
+
+<!-- You can set your favicon here -->
+<!-- link rel="shortcut icon" type="image/x-icon" href="/favicon.ico" -->
+
+<!-- end custom head snippets -->
+
+  </head>
+  <body>
+    <div class="wrapper">
+      <header>
+
+        <h1><a href="http://localhost:4000/">Doomsday Vault</a></h1>
+
+        
+          <img src="/assets/img/logo.jpg" alt="Logo" />
+        
+
+        <p>X-C3LL's Personal Blog :)</p>
+
+
+        
+        <ul class="downloads">
+          <li><a href="https://twitter.com/TheXC3LL">@TheXC3LL<strong>Twitter</strong></a></li>
+          <li><a href="https://www.linkedin.com/in/thexc3ll/">thexc3ll<strong>LinkedIn</strong></a></li>
+          <li><a href="https://mastodon.social/@XC3LL">@XC3LL<strong>Mastodon</strong></a></li>
+        </ul>
+        
+               <nav>
+  <ul>
+    <li><a href="/">Home</a></li>
+  <li><a href="/about.html">About</a></li>
+    <li><a href="/cves.html">CVEs</a></li>
+    <li><a href="/tools.html">Tools</a></li>
+    <li><a href="/stuff.html">Slides & Articles</a></li>
+  <li><a href="/rss.xml">RSS</a>/<a href="/atom.xml">Atom</a></li>
+  
+</ul>
+</nav>
+      </header>
+      <section>
+
+      <small>1 November 2019</small>
+<h1>Isolating the logic of an encrypted protocol with LIEF and kaitai</h1>
+
+
+<p>        
+Last weekend a friend of mine asked me for help with a personal project. He is researching a proprietary protocol used by a particular device to communicate with other devices in the same network in a master-slave schema. He already reversed the protocol almost entirely except a key part: the “payload” or “command” field. It is sent encrypted and we have not enough skills to reverse the algorithm used in short time. The main point of his project is to build tools to research these devices and do the usual stuff: fuzzing, MitM, etc.</p>
+
+<p>        
+The encryption / decryption logic is located in a function inside the main binary, so instead of doing a full reversing to undertand the logic behind (that could take looong time and as I said our skills are low) we want to “isolate” and replicate it outside the binary. This way we can call the decryption / encryption functions as we need in our tools. The ideas that came to my mind in order to build a MitM and decrypt the encrypted “command” were:</p>
+
+<ul>
+  <li>
+    <p>Reverse the algorithm logic and reimplement it. As I said I had no time to take this path (and to be honest I am too lazy).</p>
+  </li>
+  <li>
+    <p>Intrument the binary and hook the function (or just attach a debugger and dump the decrypted info from memory). This approach can be taken if we patch some parts of the binary (because it does few checks to verify some parts of the communication like client IDs and nonces) but has drawbacks. The binary is BIG and has tons of other functionalities that we are not interested that must be patched too. We are interested in a “portable” solution and this is far away from it.</p>
+  </li>
+  <li>
+    <p>Use <a href="https://radare.gitbooks.io/radare2book/disassembling/esil.html">Radare2 ESIL</a> to emulate the encryption / decryption logic. This idea is cool because we can do a portable solution with r2pipe. Of course it has its drawbacks too but is a solution that fits our needs.</p>
+  </li>
+  <li>
+    <p>Extract the functions from the main binary to a library with <a href="https://lief.quarkslab.com/doc/latest/tutorials/08_elf_bin2lib.html">LIEF</a>. I remembered <a href="https://blahcat.github.io/2018/03/11/fuzzing-arbitrary-functions-in-elf-binaries/">this post where this tool is used to expose and fuzz an internal function</a>. Our binary is a PIE executable (x86_64) so it is the perfect scenario to use it. Let’s go!</p>
+  </li>
+</ul>
+
+<h2 id="extracting-the-target-functions">Extracting the target functions</h2>
+<p>        
+As we said before, is it easy to spot the functions that decrypt / encrypt the payload just following the program flow with a debugger. Indeed we know that it uses 3 arguments (a pointer to the encrypted command, a pointer to a buffer to save the decrypted command and a sizer) and returns a status code if it fails:</p>
+
+<div class="language-plaintext highlighter-rouge"><div class="highlight"><pre class="highlight"><code>[0x7ff45af70c20]&gt; db 0x55b2646ec960
+[0x7ff45af70c20]&gt; dc
+hit breakpoint at: 55b2646ec960
+[0x55b2646ec960]&gt; pd 6
+            ;-- rip:
+|           ; var int local_18h @ rbp-0x18
+|           ; var int local_10h @ rbp-0x10
+|           ; var int local_8h @ rbp-0x8
+|           0x55b2646ec960 b    55             push rbp
+|           0x55b2646ec961      4889e5         mov rbp, rsp
+|           0x55b2646ec964      4883ec20       sub rsp, 0x20
+|           0x55b2646ec968      48897df8       mov qword [local_8h], rdi  // Pointer to the encrypted string
+|           0x55b2646ec96c      488975f0       mov qword [local_10h], rsi // Pointer to the empty buffer
+|           0x55b2646ec970      488955e8       mov qword [local_18h], rdx // Size
+
+</code></pre></div></div>
+<p>        
+With this schema, where we have a “blackbox” function that is fed with an input and returns the info that we need, it is easy to set a shabby solution based in the usage a debugger. Just put a breakpoint at the return address and read from memory the decrypted string (this can be done trivially with r2pipe or even the GDB’s python API). This approach is fine if you want to study what is doing your device but is really “strict” and has limited usability.</p>
+
+<p>        
+We can use LIEF to convert the binary in a library that exports our “blackbox” function, so we do not need to care about what this function does under the hood. We only need to set the arguments correctly in our tools and use the output. The conversion process is straight forward:</p>
+
+<div class="language-python highlighter-rouge"><div class="highlight"><pre class="highlight"><code> <span class="kn">import</span> <span class="nn">lief</span>
+ <span class="n">target</span> <span class="o">=</span> <span class="s">"XXX"</span>
+ <span class="n">elf</span> <span class="o">=</span> <span class="n">lief</span><span class="p">.</span><span class="n">parse</span><span class="p">(</span><span class="n">target</span><span class="p">)</span>
+ <span class="n">elf</span><span class="p">.</span><span class="n">add_exported_function</span><span class="p">(</span><span class="mh">0x00253960</span><span class="p">,</span> <span class="s">"decrypt_payload"</span><span class="p">)</span>
+ <span class="n">elf</span><span class="p">.</span><span class="n">write</span><span class="p">(</span><span class="s">"libXXX.so"</span><span class="p">)</span>
+</code></pre></div></div>
+
+<p>        
+Now we have a “libXXX.so” that exports our target function (located at 0x00253960) and can be called from any tool created by us.</p>
+
+<div class="language-c highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="cp">#include</span> <span class="cpf">&lt;dlfcn.h&gt;</span><span class="cp">
+#include</span> <span class="cpf">&lt;stdio.h&gt;</span><span class="cp">
+#include</span> <span class="cpf">&lt;stdlib.h&gt;</span><span class="cp">
+</span>
+<span class="k">typedef</span> <span class="nf">int</span><span class="p">(</span><span class="o">*</span><span class="n">decrypt_payload_t</span><span class="p">)(</span><span class="kt">char</span> <span class="o">*</span><span class="p">,</span> <span class="kt">char</span> <span class="o">*</span><span class="p">,</span> <span class="kt">size_t</span><span class="p">);</span>
+<span class="kt">int</span> <span class="nf">main</span> <span class="p">(</span><span class="kt">int</span> <span class="n">argc</span><span class="p">,</span> <span class="kt">char</span><span class="o">**</span> <span class="n">argv</span><span class="p">)</span> <span class="p">{</span>
+	<span class="kt">void</span><span class="o">*</span> <span class="n">handler</span> <span class="o">=</span> <span class="n">dlopen</span><span class="p">(</span><span class="s">"./libXXX.so"</span><span class="p">,</span> <span class="n">RTLD_LAZY</span><span class="p">);</span>
+	<span class="n">decrypt_payload_t</span> <span class="n">decrypt_payload</span> <span class="o">=</span> <span class="p">(</span><span class="n">decrypt_payload_t</span><span class="p">)</span><span class="n">dlsym</span><span class="p">(</span><span class="n">handler</span><span class="p">,</span> <span class="s">"decrypt_payload"</span><span class="p">);</span>
+	<span class="p">...</span>
+	<span class="n">decrypt_payload</span><span class="p">(</span><span class="n">encrypted</span><span class="p">,</span> <span class="n">buffer</span><span class="p">,</span> <span class="n">size</span><span class="p">);</span> <span class="c1">// encrypted is read from STDIN so we can interact easily</span>
+	<span class="p">...</span>
+
+<span class="p">}</span>
+</code></pre></div></div>
+
+<p>        
+That was easy and cool. We can do the same with the function that encrypts the commands, so we can forge our own valid messages.</p>
+
+<h2 id="generating-a-parser-with-kaitai-struct">Generating a parser with Kaitai Struct</h2>
+<p>        
+<a href="https://kaitai.io/">Kaitai Struct</a> is a declarative language used to describe binary structures. It has fantastics advantages versus writing the umpteenth parser in your favourite language. For example you only need to describe the structure one time as a <strong>ksy</strong> file and then you can generate automatically the parser code to a supported language, so you can reuse it in a painless way. I encourage you to start using Kaitai in your projects, it is one of those things that makes your life easier.</p>
+
+<p>        
+As I do not want to spoil the personal project of my friend, I am going to describe a “fake” protocol (indeed is not so fake, just a oversimplification of the real one). Let’s say that a packet has the next fields:</p>
+
+<p><strong>AA</strong> =&gt; [2 bytes] Magic Header</p>
+
+<p><strong>BB</strong> =&gt; [2 bytes] Version</p>
+
+<p><strong>CC</strong> =&gt; [2 bytes] Minimum version supported</p>
+
+<p><strong>DDDD</strong> =&gt; [4 bytes] Device identificator</p>
+
+<p><strong>EEEE</strong> =&gt; [4 bytes] Sequence number</p>
+
+<p><strong>FFFF</strong> =&gt; [4 bytes] Sizer</p>
+
+<p><strong>XX…XX</strong> =&gt; [Sizer bytes] encrypted command</p>
+
+<p>        
+We know the format of a packet, so let start describing it in a .ksy file (YAML syntax). First we need to set a generic name and the endianness (we are dealing with a big endian format):</p>
+
+<div class="language-yaml highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="na">meta</span><span class="pi">:</span>
+<span class="err">	</span><span class="na">id</span><span class="pi">:</span> <span class="s">fake_protocol</span>
+<span class="na">	endian</span><span class="pi">:</span> <span class="s">be</span>
+</code></pre></div></div>
+<p>        
+Now we can start defining each field sequentially, with the type (integers, floats…) and the size (more info in the <a href="http://doc.kaitai.io/user_guide.html">official documentation</a>):</p>
+
+<div class="language-yaml highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="na">meta</span><span class="pi">:</span>
+ <span class="na">id</span><span class="pi">:</span> <span class="s">fake_protocol</span>
+ <span class="na">endian</span><span class="pi">:</span> <span class="s">be</span>
+<span class="na">seq</span><span class="pi">:</span>
+ <span class="pi">-</span> <span class="na">id</span><span class="pi">:</span> <span class="s">header</span>
+   <span class="na">type</span><span class="pi">:</span> <span class="s">u2</span>
+ <span class="pi">-</span> <span class="na">id</span><span class="pi">:</span> <span class="s">version</span>
+   <span class="na">type</span><span class="pi">:</span> <span class="s">u2</span>
+ <span class="pi">-</span> <span class="na">id</span><span class="pi">:</span> <span class="s">minversion</span>
+   <span class="na">type</span><span class="pi">:</span> <span class="s">u2</span>
+ <span class="pi">-</span> <span class="na">id</span><span class="pi">:</span> <span class="s">device</span>
+   <span class="na">type</span><span class="pi">:</span> <span class="s">u4</span>
+ <span class="pi">-</span> <span class="na">id</span><span class="pi">:</span> <span class="s">seqnumber</span>
+   <span class="na">type</span><span class="pi">:</span> <span class="s">u4</span>
+ <span class="pi">-</span> <span class="na">id</span><span class="pi">:</span> <span class="s">sizer</span>
+   <span class="na">type</span><span class="pi">:</span> <span class="s">u4</span>
+ <span class="pi">-</span> <span class="na">id</span><span class="pi">:</span> <span class="s">command_encrypted</span>
+   <span class="na">size</span><span class="pi">:</span> <span class="s">sizer</span>
+</code></pre></div></div>
+
+<p>        
+The real one is more complicated than this example, but this is enough to understand the basic usage. After describing the structure we need to compile the ksy file with <strong>ksc</strong>:</p>
+
+<div class="language-plaintext highlighter-rouge"><div class="highlight"><pre class="highlight"><code>ksc fake.ksy -t python
+</code></pre></div></div>
+<p>        
+Et voilà! Here is the parser autogenerated:</p>
+
+<div class="language-python highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c1"># This is a generated file! Please edit source .ksy file and use kaitai-struct-compiler to rebuild
+</span>
+<span class="kn">from</span> <span class="nn">pkg_resources</span> <span class="kn">import</span> <span class="n">parse_version</span>
+<span class="kn">from</span> <span class="nn">kaitaistruct</span> <span class="kn">import</span> <span class="n">__version__</span> <span class="k">as</span> <span class="n">ks_version</span><span class="p">,</span> <span class="n">KaitaiStruct</span><span class="p">,</span> <span class="n">KaitaiStream</span><span class="p">,</span> <span class="n">BytesIO</span>
+
+
+<span class="k">if</span> <span class="n">parse_version</span><span class="p">(</span><span class="n">ks_version</span><span class="p">)</span> <span class="o">&lt;</span> <span class="n">parse_version</span><span class="p">(</span><span class="s">'0.7'</span><span class="p">):</span>
+    <span class="k">raise</span> <span class="nb">Exception</span><span class="p">(</span><span class="s">"Incompatible Kaitai Struct Python API: 0.7 or later is required, but you have %s"</span> <span class="o">%</span> <span class="p">(</span><span class="n">ks_version</span><span class="p">))</span>
+
+<span class="k">class</span> <span class="nc">FakeProtocol</span><span class="p">(</span><span class="n">KaitaiStruct</span><span class="p">):</span>
+    <span class="k">def</span> <span class="nf">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">_io</span><span class="p">,</span> <span class="n">_parent</span><span class="o">=</span><span class="bp">None</span><span class="p">,</span> <span class="n">_root</span><span class="o">=</span><span class="bp">None</span><span class="p">):</span>
+        <span class="bp">self</span><span class="p">.</span><span class="n">_io</span> <span class="o">=</span> <span class="n">_io</span>
+        <span class="bp">self</span><span class="p">.</span><span class="n">_parent</span> <span class="o">=</span> <span class="n">_parent</span>
+        <span class="bp">self</span><span class="p">.</span><span class="n">_root</span> <span class="o">=</span> <span class="n">_root</span> <span class="k">if</span> <span class="n">_root</span> <span class="k">else</span> <span class="bp">self</span>
+        <span class="bp">self</span><span class="p">.</span><span class="n">_read</span><span class="p">()</span>
+
+    <span class="k">def</span> <span class="nf">_read</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="bp">self</span><span class="p">.</span><span class="n">header</span> <span class="o">=</span> <span class="bp">self</span><span class="p">.</span><span class="n">_io</span><span class="p">.</span><span class="n">read_u2be</span><span class="p">()</span>
+        <span class="bp">self</span><span class="p">.</span><span class="n">version</span> <span class="o">=</span> <span class="bp">self</span><span class="p">.</span><span class="n">_io</span><span class="p">.</span><span class="n">read_u2be</span><span class="p">()</span>
+        <span class="bp">self</span><span class="p">.</span><span class="n">minversion</span> <span class="o">=</span> <span class="bp">self</span><span class="p">.</span><span class="n">_io</span><span class="p">.</span><span class="n">read_u2be</span><span class="p">()</span>
+        <span class="bp">self</span><span class="p">.</span><span class="n">device</span> <span class="o">=</span> <span class="bp">self</span><span class="p">.</span><span class="n">_io</span><span class="p">.</span><span class="n">read_u4be</span><span class="p">()</span>
+        <span class="bp">self</span><span class="p">.</span><span class="n">seqnumber</span> <span class="o">=</span> <span class="bp">self</span><span class="p">.</span><span class="n">_io</span><span class="p">.</span><span class="n">read_u4be</span><span class="p">()</span>
+        <span class="bp">self</span><span class="p">.</span><span class="n">sizer</span> <span class="o">=</span> <span class="bp">self</span><span class="p">.</span><span class="n">_io</span><span class="p">.</span><span class="n">read_u4be</span><span class="p">()</span>
+        <span class="bp">self</span><span class="p">.</span><span class="n">command_encrypted</span> <span class="o">=</span> <span class="bp">self</span><span class="p">.</span><span class="n">_io</span><span class="p">.</span><span class="n">read_bytes</span><span class="p">(</span><span class="bp">self</span><span class="p">.</span><span class="n">sizer</span><span class="p">)</span>
+</code></pre></div></div>
+<p>        
+Accesing the info is trivial:</p>
+
+<div class="language-python highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c1"># This is a generated file! Please edit source .ksy file and use kaitai-struct-compiler to rebuild
+</span> <span class="kn">from</span> <span class="nn">pkg_resources</span> <span class="kn">import</span> <span class="n">parse_version</span>
+ <span class="kn">from</span> <span class="nn">kaitaistruct</span> <span class="kn">import</span> <span class="n">__version__</span> <span class="k">as</span> <span class="n">ks_version</span><span class="p">,</span> <span class="n">KaitaiStruct</span><span class="p">,</span> <span class="n">KaitaiStream</span><span class="p">,</span> <span class="n">BytesIO</span>
+
+ <span class="p">(...)</span>                                                                                                                                                                                                                                                                                        
+ <span class="n">f</span> <span class="o">=</span> <span class="nb">open</span><span class="p">(</span><span class="s">"captured"</span><span class="p">,</span> <span class="s">"rb"</span><span class="p">)</span>
+ <span class="n">fake</span> <span class="o">=</span> <span class="n">KaitaiStream</span><span class="p">(</span><span class="n">f</span><span class="p">)</span>
+ <span class="n">data</span> <span class="o">=</span> <span class="n">FakeProtocol</span><span class="p">(</span><span class="n">fake</span><span class="p">)</span>
+ <span class="k">print</span> <span class="s">"Version: "</span> <span class="o">+</span> <span class="nb">str</span><span class="p">(</span><span class="n">data</span><span class="p">.</span><span class="n">version</span><span class="p">)</span>
+ <span class="k">print</span> <span class="s">"Device: "</span> <span class="o">+</span> <span class="nb">str</span><span class="p">(</span><span class="nb">hex</span><span class="p">(</span><span class="n">data</span><span class="p">.</span><span class="n">device</span><span class="p">))</span>
+ <span class="k">print</span> <span class="s">"Sizer: "</span> <span class="o">+</span> <span class="nb">str</span><span class="p">(</span><span class="n">data</span><span class="p">.</span><span class="n">sizer</span><span class="p">)</span>
+ <span class="k">print</span> <span class="s">"Command: </span><span class="se">\n</span><span class="s">"</span> <span class="o">+</span> <span class="n">decrypt</span><span class="p">(</span><span class="n">data</span><span class="p">.</span><span class="n">command_encrypted</span><span class="p">)</span> <span class="c1"># decrypt() calls our binary that decrypts the payload
+</span></code></pre></div></div>
+
+<div class="language-plaintext highlighter-rouge"><div class="highlight"><pre class="highlight"><code>mothra@arcadia:/tmp|⇒  python fake.py
+Version: 137
+Device: 0x13371337
+Sizer: 53
+Command: (...)
+</code></pre></div></div>
+
+<h2 id="final-words">Final words</h2>
+<p>        
+Sometimes we have to fight with tasks that can be tedious or apparently too hard. Fortunately there are projects that if you use them wisely they can make your life a lot easier. Here we saw how LIEF and Kaitai Struct saved us hours of work: the toolset to start playing with this propietary protocol was build in few minutes.</p>
+
+<p>        
+The article is more like a personal note to use in the future if I encounter a similar situation again. If it has been helpful to you, or you find an error/typo, feel free to contact me at <a href="https://twitter.com/THEXC3LL">@TheXC3LL</a>.</p>
+
+
+
+
+      </section>
+      <footer>
+        
+        <p>This project is maintained by <a href="https://github.com/pages-themes">pages-themes</a></p>
+        
+        <p><small>Hosted on GitHub Pages &mdash; Theme by <a href="https://github.com/orderedlist">orderedlist</a></small></p>
+      </footer>
+    </div>
+    <script src="/assets/js/scale.fix.js"></script>
+  </body>
+</html>

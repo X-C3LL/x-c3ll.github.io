@@ -1,0 +1,638 @@
+<!DOCTYPE html>
+<html lang="en-US">
+  <head>
+    <meta charset="UTF-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+
+<!-- Begin Jekyll SEO tag v2.8.0 -->
+<title>JavaScript AntiDebugging Tricks | Doomsday Vault</title>
+<meta name="generator" content="Jekyll v3.9.5" />
+<meta property="og:title" content="JavaScript AntiDebugging Tricks" />
+<meta name="author" content="X-C3LL" />
+<meta property="og:locale" content="en_US" />
+<meta name="description" content="List of antidebugging techniques applied to JavaScript (focused on browsers)" />
+<meta property="og:description" content="List of antidebugging techniques applied to JavaScript (focused on browsers)" />
+<link rel="canonical" href="http://localhost:4000/posts/2018/02/08/javascript-antidebugging.html" />
+<meta property="og:url" content="http://localhost:4000/posts/2018/02/08/javascript-antidebugging.html" />
+<meta property="og:site_name" content="Doomsday Vault" />
+<meta property="og:type" content="article" />
+<meta property="article:published_time" content="2018-02-08T13:00:00+01:00" />
+<meta name="twitter:card" content="summary" />
+<meta property="twitter:title" content="JavaScript AntiDebugging Tricks" />
+<script type="application/ld+json">
+{"@context":"https://schema.org","@type":"BlogPosting","author":{"@type":"Person","name":"X-C3LL"},"dateModified":"2018-02-08T13:00:00+01:00","datePublished":"2018-02-08T13:00:00+01:00","description":"List of antidebugging techniques applied to JavaScript (focused on browsers)","headline":"JavaScript AntiDebugging Tricks","mainEntityOfPage":{"@type":"WebPage","@id":"http://localhost:4000/posts/2018/02/08/javascript-antidebugging.html"},"publisher":{"@type":"Organization","logo":{"@type":"ImageObject","url":"http://localhost:4000/assets/img/logo.jpg"},"name":"X-C3LL"},"url":"http://localhost:4000/posts/2018/02/08/javascript-antidebugging.html"}</script>
+<!-- End Jekyll SEO tag -->
+
+    <link rel="stylesheet" href="/assets/css/style.css?v=c27a30cb27997bd3ed45ba5a77bd97bd27cbeb64">
+    <!--[if lt IE 9]>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html5shiv/3.7.3/html5shiv.min.js"></script>
+    <![endif]-->
+    <!-- start custom head snippets, customize with your own _includes/head-custom.html file -->
+
+<!-- Setup Google Analytics -->
+
+
+
+<!-- You can set your favicon here -->
+<!-- link rel="shortcut icon" type="image/x-icon" href="/favicon.ico" -->
+
+<!-- end custom head snippets -->
+
+  </head>
+  <body>
+    <div class="wrapper">
+      <header>
+
+        <h1><a href="http://localhost:4000/">Doomsday Vault</a></h1>
+
+        
+          <img src="/assets/img/logo.jpg" alt="Logo" />
+        
+
+        <p>X-C3LL's Personal Blog :)</p>
+
+
+        
+        <ul class="downloads">
+          <li><a href="https://twitter.com/TheXC3LL">@TheXC3LL<strong>Twitter</strong></a></li>
+          <li><a href="https://www.linkedin.com/in/thexc3ll/">thexc3ll<strong>LinkedIn</strong></a></li>
+          <li><a href="https://mastodon.social/@XC3LL">@XC3LL<strong>Mastodon</strong></a></li>
+        </ul>
+        
+               <nav>
+  <ul>
+    <li><a href="/">Home</a></li>
+  <li><a href="/about.html">About</a></li>
+    <li><a href="/cves.html">CVEs</a></li>
+    <li><a href="/tools.html">Tools</a></li>
+    <li><a href="/stuff.html">Slides & Articles</a></li>
+  <li><a href="/rss.xml">RSS</a>/<a href="/atom.xml">Atom</a></li>
+  
+</ul>
+</nav>
+      </header>
+      <section>
+
+      <small>8 February 2018</small>
+<h1>JavaScript AntiDebugging Tricks</h1>
+
+
+<p><strong>Disclaimer:</strong> <em>This post was updated (December 2021)</em></p>
+
+<p>        
+Last summer I spent a lot of time talking with <a href="https://twitter.com/cgvwzq">@cgvwzq</a> about antidebugging tricks in JavaScript. We tried to find resources or articles were this topic was analyzed, but the documentation is poor and mostly incomplete. You can find little tricks around the net, but we could not find a resource where all of them were collected. So… here comes our quest.</p>
+
+<p>        
+The intention of this article is to collect little tricks (some of them seen already used by malware or comercial products, and other ideas are ours) related to antidebugging in JavaScript.</p>
+
+<p>        
+Keep in mind this: we are not talking about silver bullets. It’s JavaScript. With time and coffee you can debug and reverse the logic inside a snippet of JavaScript. What we want to offer is just some ideas to difficult the task of understand what the code does. Indeed what we show here are techniques not related with obfuscation (tons of information and tools are available), they are more oriented to difficult actively the debugging process.</p>
+
+<p>        
+In a general way, the approachs of the techniques shown in this post are:</p>
+<ul>
+  <li>Detect unexpected enviroments of execution (we only want to be executed in browsers)</li>
+  <li>Detect debugging tools (for example DevTools)</li>
+  <li>Code Integrity Controls</li>
+  <li>Flow Integrity Controls</li>
+  <li>Anti-emulation</li>
+</ul>
+
+<p>        
+Our main idea is to combine the techniques shown here with obfuscation and cryptography. The code is splitted in a serie of encrypted code-blocks were the decryption process of every blocks depends on other blocks previously decrypted. The intended program flow is to jump from encrypted block to encrypted block in a known sequence. If any of our checks detect something “odd”,  the program flow changes his natural path and reach fake blocks. So, when we detect someone debugging our code
+we just send him to a fake region, keeping the “interesting” parts away from him.</p>
+
+<p>        
+If you know more tricks that are not listed here, please contact me at <a href="https://twitter.com/TheXC3LL">@TheXC3LL</a> so I can add them to this article.</p>
+
+<h2 id="0x01-function-redefinitions">0x01 Function redefinitions</h2>
+<p>        
+This is for far the most basic and well-known technique used to avoid someone to debug our code. In JavaScript we can redefine the functions that are used usually to retrieve information. For example, console.log() is used to show in the console information about functions, variables, etc. If we redefine this function, and we change his behaviour, we can hide certain information or just fake it.</p>
+
+<p>        
+To see it in action, just run this inside your DevTools:</p>
+
+<div class="language-javascript highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="nx">console</span><span class="p">.</span><span class="nx">log</span><span class="p">(</span><span class="dl">"</span><span class="s2">Hello World</span><span class="dl">"</span><span class="p">);</span>
+<span class="kd">var</span> <span class="nx">fake</span> <span class="o">=</span> <span class="kd">function</span><span class="p">()</span> <span class="p">{};</span>
+<span class="nb">window</span><span class="p">[</span><span class="dl">'</span><span class="s1">console</span><span class="dl">'</span><span class="p">][</span><span class="dl">'</span><span class="s1">log</span><span class="dl">'</span><span class="p">]</span> <span class="o">=</span> <span class="nx">fake</span><span class="p">;</span>
+<span class="nx">console</span><span class="p">.</span><span class="nx">log</span><span class="p">(</span><span class="dl">"</span><span class="s2">You can't see me!</span><span class="dl">"</span><span class="p">);</span>
+</code></pre></div></div>
+<p>        
+What we should see is:</p>
+<div class="language-plaintext highlighter-rouge"><div class="highlight"><pre class="highlight"><code>VM48:1 Hello World
+</code></pre></div></div>
+<p>        
+The second message is not shown because we “disabled” the function with a redefinition to an empty function. But we can be a bit more ingenious and just change his behaviour to show fakec information. To ilustrate it:</p>
+
+<div class="language-javascript highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="nx">console</span><span class="p">.</span><span class="nx">log</span><span class="p">(</span><span class="dl">"</span><span class="s2">Normal function</span><span class="dl">"</span><span class="p">);</span>
+<span class="c1">// First we save a reference to the original console.log function</span>
+<span class="kd">var</span> <span class="nx">original</span> <span class="o">=</span> <span class="nb">window</span><span class="p">[</span><span class="dl">'</span><span class="s1">console</span><span class="dl">'</span><span class="p">][</span><span class="dl">'</span><span class="s1">log</span><span class="dl">'</span><span class="p">];</span>
+<span class="c1">// Next we create our fake function</span>
+<span class="c1">// Basicly we check the argument and if match we call original function with other param.</span>
+<span class="c1">// If there is no match pass the argument to the original function</span>
+<span class="kd">var</span> <span class="nx">fake</span> <span class="o">=</span> <span class="kd">function</span><span class="p">(</span><span class="nx">argument</span><span class="p">)</span> <span class="p">{</span>
+    <span class="k">if</span> <span class="p">(</span><span class="nx">argument</span> <span class="o">===</span> <span class="dl">"</span><span class="s2">Ka0labs</span><span class="dl">"</span><span class="p">)</span> <span class="p">{</span>
+        <span class="nx">original</span><span class="p">(</span><span class="dl">"</span><span class="s2">Spoofed!</span><span class="dl">"</span><span class="p">);</span>
+    <span class="p">}</span> <span class="k">else</span> <span class="p">{</span>
+        <span class="nx">original</span><span class="p">(</span><span class="nx">argument</span><span class="p">);</span>
+    <span class="p">}</span>
+<span class="p">}</span>
+<span class="c1">// We redefine now console.log as our fake function</span>
+<span class="nb">window</span><span class="p">[</span><span class="dl">'</span><span class="s1">console</span><span class="dl">'</span><span class="p">][</span><span class="dl">'</span><span class="s1">log</span><span class="dl">'</span><span class="p">]</span> <span class="o">=</span> <span class="nx">fake</span><span class="p">;</span>
+<span class="c1">// Then we call console.log with any argument</span>
+<span class="nx">console</span><span class="p">.</span><span class="nx">log</span><span class="p">(</span><span class="dl">"</span><span class="s2">This is unaltered</span><span class="dl">"</span><span class="p">);</span>
+<span class="c1">// Now we should see other text in console different to "Ka0labs"</span>
+<span class="nx">console</span><span class="p">.</span><span class="nx">log</span><span class="p">(</span><span class="dl">"</span><span class="s2">Ka0labs</span><span class="dl">"</span><span class="p">);</span>
+<span class="c1">// Aaaand everything still OK</span>
+<span class="nx">console</span><span class="p">.</span><span class="nx">log</span><span class="p">(</span><span class="dl">"</span><span class="s2">Bye bye!</span><span class="dl">"</span><span class="p">);</span>
+</code></pre></div></div>
+<p>        
+And if everything works…</p>
+<div class="language-plaintext highlighter-rouge"><div class="highlight"><pre class="highlight"><code>Normal function
+VM117:11 This is unaltered
+VM117:9 Spoofed!
+VM117:11 Bye bye!
+</code></pre></div></div>
+
+<p>        
+If you played before with “hooking” this will sound familiar to you.</p>
+
+<p>        
+We can be even more clever and redefine other functions more interesting in order to control  the code executed in an unexpected way. For example, we can build a snippet based on the code shown before to redefine the eval function. We can pass JavaScript code to the eval function, so this code will be evaluated and executed. <strong>But if we redefine the function, we can run a different code.</strong> So… what you see is not what you get :).</p>
+
+<div class="language-javascript highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c1">// Just a normal eval</span>
+<span class="nb">eval</span><span class="p">(</span><span class="dl">"</span><span class="s2">console.log('1337')</span><span class="dl">"</span><span class="p">);</span>
+<span class="c1">// Now we repat the process...</span>
+<span class="kd">var</span> <span class="nx">original</span> <span class="o">=</span> <span class="nb">eval</span><span class="p">;</span>
+<span class="kd">var</span> <span class="nx">fake</span> <span class="o">=</span> <span class="kd">function</span><span class="p">(</span><span class="nx">argument</span><span class="p">)</span> <span class="p">{</span>
+    <span class="c1">// If the code to be evaluated contains 1337...</span>
+    <span class="k">if</span> <span class="p">(</span><span class="nx">argument</span><span class="p">.</span><span class="nx">indexOf</span><span class="p">(</span><span class="dl">"</span><span class="s2">1337</span><span class="dl">"</span><span class="p">)</span> <span class="o">!==</span> <span class="o">-</span><span class="mi">1</span><span class="p">)</span> <span class="p">{</span>
+        <span class="c1">// ... we just execute a different code</span>
+        <span class="nx">original</span><span class="p">(</span><span class="dl">"</span><span class="s2">for (i = 0; i &lt; 10; i++) { console.log(i);}</span><span class="dl">"</span><span class="p">);</span>
+    <span class="p">}</span>
+    <span class="k">else</span> <span class="p">{</span>
+        <span class="nx">original</span><span class="p">(</span><span class="nx">argument</span><span class="p">);</span>
+    <span class="p">}</span>
+<span class="p">}</span>
+<span class="nb">eval</span> <span class="o">=</span> <span class="nx">fake</span><span class="p">;</span>
+<span class="nb">eval</span><span class="p">(</span><span class="dl">"</span><span class="s2">console.log('We should see this...')</span><span class="dl">"</span><span class="p">);</span>
+<span class="c1">// Now we should see the execution of a for loop instead of what is expected</span>
+<span class="nb">eval</span><span class="p">(</span><span class="dl">"</span><span class="s2">console.log('Too 1337 for you!')</span><span class="dl">"</span><span class="p">);</span>
+</code></pre></div></div>
+<p>        
+And… Yep, we executed a different code (the “for” loop instead of the console.log with the string “Too 1337 for you!”).</p>
+
+<div class="language-plaintext highlighter-rouge"><div class="highlight"><pre class="highlight"><code>1337
+VM146:1 We should see this...
+VM147:1 0
+VM147:1 1
+VM147:1 2
+VM147:1 3
+VM147:1 4
+VM147:1 5
+VM147:1 6
+VM147:1 7
+VM147:1 8
+VM147:1 9
+</code></pre></div></div>
+
+<p>        
+Modifying the flow of our program by this way is a cool trick, but as we said at the begin, it is the most basic trick and can be detected and defeated easily. This is because in JavaScript every function has a method toString (or toSource in Firefox) that returns its own code. So it only needs to check if the code of the desire function was changed or not. Of course we can redefine the method toString / toSource, but we are stucked in the same situation: function.toString.toString().</p>
+
+<p>        
+We will talk more about “hooking” and function redefinitons later, using another aproach based on the <strong>proxy object</strong>.</p>
+
+<h2 id="0x02-breakpoints">0x02 Breakpoints</h2>
+
+<p>        
+The tools used to debug JavaScript (for example DevTools) has the capacity of block the script execution at an arbitrary point in order to help us to undertand what is happening. This is done with “breakpoints”. Using breakpoints when you are debugging helps you to see what happened, what is happening and will happen next, so they are one of the most fundamentals basis of debugging.</p>
+
+<p>        
+If you played a bit with a debugger and the x86 family probably you know about the 0xCC instruction. In JavaScript we have an analog instruction called <strong>debugger</strong>. Placing a debugger; sentence inside your code will produce a stop in the execution of your script when the debugger hit that instruction. Example:</p>
+
+<div class="language-javascript highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="nx">console</span><span class="p">.</span><span class="nx">log</span><span class="p">(</span><span class="dl">"</span><span class="s2">See me!</span><span class="dl">"</span><span class="p">);</span>
+<span class="k">debugger</span><span class="p">;</span>
+<span class="nx">console</span><span class="p">.</span><span class="nx">log</span><span class="p">(</span><span class="dl">"</span><span class="s2">See me!</span><span class="dl">"</span><span class="p">);</span>
+</code></pre></div></div>
+<p>        
+If you execute this code with your DevTools opened, a prompt asking you to resume the execution will be shown. Until you press “Continue” the script will be blocked at that point. And here comes the next (pretty stupid) trick seen in comercial products: just put a infinte loop of <strong>debugger;</strong>. Some browsers prevents this situation, others not. But the concept inside this is just to annoy the guy debugging your code. The loop will flood you with a torrent of windows asking to resume the execution, so we can’t start to
+work reversing the script  until this is fixed.</p>
+
+<div class="language-javascript highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="nx">setTimeout</span><span class="p">(</span><span class="kd">function</span><span class="p">()</span> <span class="p">{</span><span class="k">while</span> <span class="p">(</span><span class="kc">true</span><span class="p">)</span> <span class="p">{</span><span class="nb">eval</span><span class="p">(</span><span class="dl">"</span><span class="s2">debugger</span><span class="dl">"</span><span class="p">)}})</span>
+</code></pre></div></div>
+
+<p>        
+Other trick related with breakpoints will be explained in next section.</p>
+
+<h2 id="0x03-differences-of-time">0x03 Differences of time</h2>
+
+<p>        
+Another trick borrowed from classic anti-reversing techniques is to use checks based on time. When a script is executed with DevTools (or similar), the execution time is markedly slowed. This situation can be abused by us using the time as a little canary that tells us if we are being debugged or not. This aproach can be done in differentes ways.</p>
+
+<p>        
+For example we can measure the elapsed time betweeen two or more points inside the code. If we know the elapsed mean time between those points in “natural” conditions we can use this value as a reference. An elapsed time bigger than the expected would mean that we are being under a debugger.</p>
+
+<p>        
+Other idea based on this topic is to have some functions with loops or another “heavy” code wich execution time is known:</p>
+
+<div class="language-javascript highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="nx">setInterval</span><span class="p">(</span><span class="kd">function</span><span class="p">(){</span>
+  <span class="kd">var</span> <span class="nx">startTime</span> <span class="o">=</span> <span class="nx">performance</span><span class="p">.</span><span class="nx">now</span><span class="p">(),</span> <span class="nx">check</span><span class="p">,</span> <span class="nx">diff</span><span class="p">;</span>
+  <span class="k">for</span> <span class="p">(</span><span class="nx">check</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span> <span class="nx">check</span> <span class="o">&lt;</span> <span class="mi">1000</span><span class="p">;</span> <span class="nx">check</span><span class="o">++</span><span class="p">){</span>
+    <span class="nx">console</span><span class="p">.</span><span class="nx">log</span><span class="p">(</span><span class="nx">check</span><span class="p">);</span>
+    <span class="nx">console</span><span class="p">.</span><span class="nx">clear</span><span class="p">();</span>
+  <span class="p">}</span>
+  <span class="nx">diff</span> <span class="o">=</span> <span class="nx">performance</span><span class="p">.</span><span class="nx">now</span><span class="p">()</span> <span class="o">-</span> <span class="nx">startTime</span><span class="p">;</span>
+  <span class="k">if</span> <span class="p">(</span><span class="nx">diff</span> <span class="o">&gt;</span> <span class="mi">200</span><span class="p">){</span>
+    <span class="nx">alert</span><span class="p">(</span><span class="dl">"</span><span class="s2">Debugger detected!</span><span class="dl">"</span><span class="p">);</span>
+  <span class="p">}</span>
+<span class="p">},</span> <span class="mi">500</span><span class="p">);</span>
+</code></pre></div></div>
+<p>        
+First run that code without DevTools opened and later open it. As you can see we could detect the presence of a debugger because the time difference was greater than the expected. This approach to using time references as a canary can be combined with what is shown in the previous section. So we can take a time reference before and after a breakpoint. If the breakpoint is executed, the amount of time lost before we can resume the execution will reveal the presence of a debugger.</p>
+
+<div class="language-javascript highlighter-rouge"><div class="highlight"><pre class="highlight"><code>    <span class="kd">var</span> <span class="nx">startTime</span> <span class="o">=</span> <span class="nx">performance</span><span class="p">.</span><span class="nx">now</span><span class="p">();</span>
+    <span class="k">debugger</span><span class="p">;</span>
+    <span class="kd">var</span> <span class="nx">stopTime</span> <span class="o">=</span> <span class="nx">performance</span><span class="p">.</span><span class="nx">now</span><span class="p">();</span>
+    <span class="k">if</span> <span class="p">((</span><span class="nx">stopTime</span> <span class="o">-</span> <span class="nx">startTime</span><span class="p">)</span> <span class="o">&gt;</span> <span class="mi">1000</span><span class="p">)</span> <span class="p">{</span>
+        <span class="nx">alert</span><span class="p">(</span><span class="dl">"</span><span class="s2">Debugger detected!</span><span class="dl">"</span><span class="p">)</span>
+    <span class="p">}</span>
+</code></pre></div></div>
+
+<p>        
+These time checks can be placed at random points inside the code so it will be harder to the analyst to spot them.</p>
+
+<h2 id="0x04-devtools-detection-i-chrome-getter">0x04 DevTools detection (I) [Chrome]: getter</h2>
+<p>        
+The first time I saw this technique was in this <a href="https://www.reddit.com/r/firefox/comments/5gtedd/ublock_origin_developer_raymond_hill_on/dav4iiu/">Reddit Post</a>. As is said in the post:</p>
+
+<blockquote>
+  <p><em>The technique used is to implement a getter on the id property of a div element. When that div element is sent to the console like console.log(div);, the browser automatically tries to get the id of the element for convenience. Hence, if the getter is executed after calling console.log, this means the console is opened.</em></p>
+</blockquote>
+
+<p>        
+A simple Proof of Concept:</p>
+<div class="language-javascript highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="kd">let</span> <span class="nx">div</span> <span class="o">=</span> <span class="nb">document</span><span class="p">.</span><span class="nx">createElement</span><span class="p">(</span><span class="dl">'</span><span class="s1">div</span><span class="dl">'</span><span class="p">);</span>
+<span class="kd">let</span> <span class="nx">loop</span> <span class="o">=</span> <span class="nx">setInterval</span><span class="p">(()</span> <span class="o">=&gt;</span> <span class="p">{</span>
+    <span class="nx">console</span><span class="p">.</span><span class="nx">log</span><span class="p">(</span><span class="nx">div</span><span class="p">);</span>
+    <span class="nx">console</span><span class="p">.</span><span class="nx">clear</span><span class="p">();</span>
+<span class="p">});</span>
+<span class="nb">Object</span><span class="p">.</span><span class="nx">defineProperty</span><span class="p">(</span><span class="nx">div</span><span class="p">,</span> <span class="dl">"</span><span class="s2">id</span><span class="dl">"</span><span class="p">,</span> <span class="p">{</span><span class="na">get</span><span class="p">:</span> <span class="p">()</span> <span class="o">=&gt;</span> <span class="p">{</span> 
+    <span class="nx">clearInterval</span><span class="p">(</span><span class="nx">loop</span><span class="p">);</span>
+    <span class="nx">alert</span><span class="p">(</span><span class="dl">"</span><span class="s2">Dev Tools detected!</span><span class="dl">"</span><span class="p">);</span>
+<span class="p">}});</span>
+</code></pre></div></div>
+
+<h2 id="0x05-devtools-detection-ii-size-changes">0x05 DevTools detection (II): size changes</h2>
+<p>        
+If DevTools is opened (unless it was opened as undocked) the difference between <strong>window.outerWidth/Height</strong> and <strong>window.innerWidth/Height</strong> will change, so it can be measured in a loop. This trick is used by <a href="https://github.com/sindresorhus/devtools-detect">Devtools-detect</a>:</p>
+
+<div class="language-javascript highlighter-rouge"><div class="highlight"><pre class="highlight"><code>        <span class="kd">const</span> <span class="nx">widthThreshold</span> <span class="o">=</span> <span class="nb">window</span><span class="p">.</span><span class="nx">outerWidth</span> <span class="o">-</span> <span class="nb">window</span><span class="p">.</span><span class="nx">innerWidth</span> <span class="o">&gt;</span> <span class="nx">threshold</span><span class="p">;</span>
+        <span class="kd">const</span> <span class="nx">heightThreshold</span> <span class="o">=</span> <span class="nb">window</span><span class="p">.</span><span class="nx">outerHeight</span> <span class="o">-</span> <span class="nb">window</span><span class="p">.</span><span class="nx">innerHeight</span> <span class="o">&gt;</span> <span class="nx">threshold</span><span class="p">;</span>
+        <span class="kd">const</span> <span class="nx">orientation</span> <span class="o">=</span> <span class="nx">widthThreshold</span> <span class="p">?</span> <span class="dl">'</span><span class="s1">vertical</span><span class="dl">'</span> <span class="p">:</span> <span class="dl">'</span><span class="s1">horizontal</span><span class="dl">'</span><span class="p">;</span>
+</code></pre></div></div>
+
+<h2 id="0x06-devtools-detection-iii-sourcemap">0x06 DevTools detection (III): SourceMap</h2>
+<p>        
+This technique was explained by <a href="https://twitter.com/WeizmanGal">@WeizmanGal</a> in his <a href="https://weizman.github.io/website/?javascript-anti-debugging-some-next-level-shit-part-1">blog</a> and is based on HTTP Leaks via JavaScript source maps. <a href="https://developer.mozilla.org/en-US/docs/Tools/Debugger/How_to/Use_a_source_map">Source maps</a> are files that hold information from the original JavaScript file before it gets minified/uglyfied, so this information can be used by the browser DevTools in order to facilitate the debugging process. The source map file associated with a script is set adding the line <strong>//# sourceMappingURL=http://server/YourFileLocation</strong> to the end, and it is fetched when the DevTools are opened. This HTTP leak can be used as a canary to notify the fact that someone is opening the DevTools but also can be used to determine what flow the program must follow.</p>
+
+<p>        
+We can add constraints to our code to veer the program flow to reach fake regions or just to stop decrypting the code because the key is derived from the value used as constraint. This value used to take one direction or another can be, for example, a cookie. And here comes an interesting fact: <strong>we can set a cookie when our server is requested for a source map file</strong>. So, we can check in our code the value of a cookie that will be set or changed only when the browser fetchs our source map file <strong>:)</strong>.</p>
+
+<div class="language-html highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="nt">&lt;html&gt;</span>
+     <span class="nt">&lt;head&gt;</span>
+         <span class="nt">&lt;script&gt;</span>
+      <span class="c1">// From https://weizman.github.io/website/?javascript-anti-debugging-some-next-level-shit-part-1</span>
+    <span class="kd">function</span>  <span class="nx">smap</span><span class="p">(</span><span class="nx">url</span><span class="p">)</span>  <span class="p">{</span>
+         <span class="kd">const</span> <span class="nx">script</span> <span class="o">=</span> <span class="nb">document</span><span class="p">.</span><span class="nx">createElement</span><span class="p">(</span><span class="dl">'</span><span class="s1">script</span><span class="dl">'</span><span class="p">);</span>
+         <span class="nx">script</span><span class="p">.</span><span class="nx">textContent</span> <span class="o">=</span>  <span class="s2">`//# sourceMappingURL=</span><span class="p">${</span><span class="nx">url</span><span class="p">}</span><span class="s2">`</span><span class="p">;</span>
+         <span class="nb">document</span><span class="p">.</span><span class="nx">head</span><span class="p">.</span><span class="nx">appendChild</span><span class="p">(</span><span class="nx">script</span><span class="p">);</span>
+         <span class="nx">script</span><span class="p">.</span><span class="nx">remove</span><span class="p">();</span>  <span class="c1">// that's right! the script doesn't even have to stay in DOM for this feature to work! how cool is that?!</span>
+    <span class="p">}</span>
+    <span class="nx">smap</span><span class="p">(</span><span class="dl">'</span><span class="s1">http://test/devtools.php</span><span class="dl">'</span><span class="p">);</span> <span class="c1">// </span><span class="o">&lt;</span><span class="p">?</span><span class="nx">php</span> <span class="nx">setcookie</span><span class="p">(</span><span class="dl">"</span><span class="s2">DevTools</span><span class="dl">"</span><span class="p">,</span> <span class="dl">"</span><span class="s2">True</span><span class="dl">"</span><span class="p">);</span> <span class="p">?</span><span class="o">&gt;</span>
+         <span class="nt">&lt;/script&gt;</span>
+     <span class="nt">&lt;script&gt;</span>
+    <span class="kd">function</span> <span class="nx">getCookieValue</span><span class="p">(</span><span class="nx">a</span><span class="p">)</span> <span class="p">{</span>
+        <span class="kd">var</span> <span class="nx">b</span> <span class="o">=</span> <span class="nb">document</span><span class="p">.</span><span class="nx">cookie</span><span class="p">.</span><span class="nx">match</span><span class="p">(</span><span class="dl">'</span><span class="s1">(^|[^;]+)</span><span class="se">\\</span><span class="s1">s*</span><span class="dl">'</span> <span class="o">+</span> <span class="nx">a</span> <span class="o">+</span> <span class="dl">'</span><span class="se">\\</span><span class="s1">s*=</span><span class="se">\\</span><span class="s1">s*([^;]+)</span><span class="dl">'</span><span class="p">);</span>
+        <span class="k">return</span> <span class="nx">b</span> <span class="p">?</span> <span class="nx">b</span><span class="p">.</span><span class="nx">pop</span><span class="p">()</span> <span class="p">:</span> <span class="dl">''</span><span class="p">;</span>
+    <span class="p">}</span>
+
+    <span class="nx">setInterval</span><span class="p">(</span> <span class="p">()</span> <span class="o">=&gt;</span> <span class="p">{</span> 
+            <span class="k">if</span> <span class="p">(</span><span class="nx">getCookieValue</span><span class="p">(</span><span class="dl">"</span><span class="s2">DevTools</span><span class="dl">"</span><span class="p">)</span> <span class="o">==</span> <span class="dl">"</span><span class="s2">True</span><span class="dl">"</span><span class="p">)</span> <span class="p">{</span>
+            <span class="nx">alert</span><span class="p">(</span><span class="dl">"</span><span class="s2">DevTools opened!</span><span class="dl">"</span><span class="p">);</span>
+        <span class="p">}</span>
+         <span class="p">},</span> <span class="mi">100</span><span class="p">);</span>
+     <span class="nt">&lt;/script&gt;</span>
+     <span class="nt">&lt;/head&gt;</span>
+     <span class="nt">&lt;body&gt;</span>
+         <span class="nt">&lt;h1&gt;</span>Testing SourceMappingURL<span class="nt">&lt;/h1&gt;</span>
+     <span class="nt">&lt;/body&gt;</span>
+ <span class="nt">&lt;/html&gt;</span>
+</code></pre></div></div>
+<h2 id="0x07-devtools-detection-iv-scope-pane">0x07 DevTools detection (IV): Scope Pane</h2>
+<p>        
+This technique was also explained by <a href="https://twitter.com/WeizmanGal">@WeizmanGal</a> in his <a href="https://weizman.github.io/?javascript-anti-debugging-some-next-level-shit-part-2">blog</a> and consists in the abuse of DevlTools’ <a href="https://developer.chrome.com/docs/devtools/javascript/#check-values">Scope Pane</a>. The Scope Pane needs to evaluate the JavaScript in order to represent the expected value, so we can smuggle inside a function a small canary that will be triggered when someone tries to debug it. Also our canary is going to be executed while the main thread is paused, so it can give a few extra headaches.</p>
+
+<p>        
+Example:</p>
+
+<div class="language-javascript highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="kd">function</span> <span class="nx">malicious</span><span class="p">()</span> <span class="p">{</span>
+    <span class="kd">const</span> <span class="nx">detect</span> <span class="o">=</span> <span class="p">(</span><span class="kd">function</span><span class="p">(){</span>
+        <span class="kd">const</span> <span class="nx">dummy</span> <span class="o">=</span> <span class="sr">/./</span><span class="p">;</span>
+        <span class="nx">dummy</span><span class="p">.</span><span class="nx">toString</span> <span class="o">=</span> <span class="p">()</span> <span class="o">=&gt;</span> <span class="p">{</span>
+            <span class="nx">alert</span><span class="p">(</span><span class="dl">'</span><span class="s1">someone is debugging the malicious function!</span><span class="dl">'</span><span class="p">);</span>
+            <span class="k">return</span> <span class="dl">'</span><span class="s1">SOME_NAME</span><span class="dl">'</span><span class="p">;</span>
+        <span class="p">};</span>
+        <span class="k">return</span> <span class="nx">dummy</span><span class="p">;</span>
+    <span class="p">}());</span>
+
+    <span class="c1">// do a malicious action</span>
+    <span class="k">if</span> <span class="p">(</span><span class="nb">window</span><span class="p">.</span><span class="nx">stealUserCookies</span><span class="p">)</span> <span class="nb">window</span><span class="p">.</span><span class="nx">stealUserCookies</span><span class="p">();</span>
+<span class="p">}</span>
+
+<span class="kd">function</span> <span class="nx">legit</span><span class="p">()</span> <span class="p">{</span>
+    <span class="c1">// do a legit action</span>
+    <span class="k">return</span> <span class="mi">1</span> <span class="o">+</span> <span class="mi">1</span><span class="p">;</span>
+<span class="p">}</span>
+
+<span class="kd">function</span> <span class="nx">main</span><span class="p">()</span> <span class="p">{</span>
+    <span class="nx">legit</span><span class="p">();</span>
+    <span class="nx">malicious</span><span class="p">();</span>
+<span class="p">}</span>
+<span class="nx">main</span><span class="p">();</span>
+</code></pre></div></div>
+<p>        
+Put a breakpoint inside <code class="language-plaintext highlighter-rouge">malicious()</code> and enjoy the alert!</p>
+
+<h2 id="0x08-implicit-control-of-flow-integrity">0x08 Implicit control of flow integrity</h2>
+
+<p>        
+One of the first steps when we try to deobfuscate a JavaScript snippet is start to rename some variables and functions in order to clarify the source code. You just split the code in smaller chunks of code and begin renaming here and there. In JavaScript we can check if the name of a function has changed or keep the same name. Or to be more correct we can check if the stack trace contains the original names and the original order.</p>
+
+<p>        
+With <strong>arguments.callee.caller</strong> we can create a stack trace where we save the functions executed previously. We can use this information to generate a hash that will be the seed used to generate the key to decrypt other parts of our JavaScript. In this way we have an implicit control of the flow integrity because if a function is renamed or the order of functions to be executed is slightly different, the hash created will be totally different. If the hash is different, the key generated will be different too. If the key is different, we can’t decrypt the code. To understand it better see next example:</p>
+
+<div class="language-javascript highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="kd">function</span> <span class="nx">getCallStack</span><span class="p">()</span> <span class="p">{</span>
+    <span class="kd">var</span> <span class="nx">stack</span> <span class="o">=</span> <span class="dl">"</span><span class="s2">#</span><span class="dl">"</span><span class="p">,</span> <span class="nx">total</span> <span class="o">=</span> <span class="mi">0</span><span class="p">,</span> <span class="nx">fn</span> <span class="o">=</span> <span class="nx">arguments</span><span class="p">.</span><span class="nx">callee</span><span class="p">;</span>
+    <span class="k">while</span> <span class="p">(</span> <span class="p">(</span><span class="nx">fn</span> <span class="o">=</span> <span class="nx">fn</span><span class="p">.</span><span class="nx">caller</span><span class="p">)</span> <span class="p">)</span> <span class="p">{</span>
+        <span class="nx">stack</span> <span class="o">=</span> <span class="nx">stack</span> <span class="o">+</span> <span class="dl">""</span> <span class="o">+</span><span class="nx">fn</span><span class="p">.</span><span class="nx">name</span><span class="p">;</span>
+        <span class="nx">total</span><span class="o">++</span>
+    <span class="p">}</span>
+    <span class="k">return</span> <span class="nx">stack</span>
+<span class="p">}</span>
+<span class="kd">function</span> <span class="nx">test1</span><span class="p">()</span> <span class="p">{</span>
+    <span class="nx">console</span><span class="p">.</span><span class="nx">log</span><span class="p">(</span><span class="nx">getCallStack</span><span class="p">());</span>
+<span class="p">}</span>
+<span class="kd">function</span> <span class="nx">test2</span><span class="p">()</span> <span class="p">{</span>
+    <span class="nx">test1</span><span class="p">();</span>
+<span class="p">}</span>
+<span class="kd">function</span> <span class="nx">test3</span><span class="p">()</span> <span class="p">{</span>
+    <span class="nx">test2</span><span class="p">();</span>
+<span class="p">}</span>
+<span class="kd">function</span> <span class="nx">test4</span><span class="p">()</span> <span class="p">{</span>
+    <span class="nx">test3</span><span class="p">();</span>
+<span class="p">}</span>
+<span class="nx">test4</span><span class="p">();</span>
+</code></pre></div></div>
+<p>        
+When you execute this code you will see the string <code class="language-plaintext highlighter-rouge">#test1test2test3test4</code>. If we modify (I invite you to do it) the name of any function the returned string will be different too. We can calculate a secure hash with that string and use it later as seed to derive the key used to decrypt other code-blocks. An interesting point here is that if we can not decrypt the next code-block because the key is invalid (the analyst changed a function name) <strong>we can catch the exception and redirect the execution flow to a fake path</strong>.</p>
+
+<p>        
+Keep in mind that this trick needs to be combined with strong obfuscation to be useful.</p>
+
+<h2 id="0x09-implicit-control-of-code-integrity">0x09 Implicit control of code integrity</h2>
+
+<p>        
+At the end of section “0x01 Function redefinitions” we mentioned that we can retrieve the code of a function in JavaScript with toString() method. As we said, this can be useful to check if a function was redefined, and indeed, this very same idea can be used to know if the code of a function was modified.</p>
+
+<p>        
+The less efective way to do it is to calculate the hash of functions or code blocks and compare it with a pre-known table. But this approach is really stupid. A more realistic and efective approach can be repeat the same strategy that we used before with the stack traces. We can calculate the hash of a chunk of code and use it as a key to decrypt other blocks of code.</p>
+
+<p>        
+The most beautiful idea in order to create an implicit integrity control is to use <strong>collisions in md5</strong>. This idea was coined by <a href="https://twitter.com/cgvwzq">@cgvwzq</a> after few beers last summer. Basicly we can create functions where its own md5 is tested inside the own function. In order to perform the check <strong>inside the function</strong> we need to play with collisions (we want to create something like <code class="language-plaintext highlighter-rouge">function(){ if (md5(arguments.callee.toString() === '&lt;md5&gt;') code_function; }</code>.</p>
+
+<p>        
+The concept behind this technique is the same used to generate image files wich md5 checksum is shown in the own picture. Here is an classic example: a gif showing his own md5 checksum.</p>
+
+<p><img src="https://shells.aachen.ccc.de/~spq/md5.gif" alt="md5 gif" /></p>
+
+<p>        
+About how to create this type of collisions there are tons of articles (even appeared some examples in PoC||GTFO) but the first one I read and could replicate was <a href="https://natmchugh.blogspot.com.es/2014/10/how-i-made-two-php-files-with-same-md5.html">this with PHP</a>. You can precalculate pretty fast the blocks needed to generate the collisions. Indeed <a href="https://gist.github.com/cgvwzq/c70901dc46aeb8a3d70dc70177428a30">here</a> is an example created by <a href="https://twitter.com/cgvwzq">@cgvwzq</a> were the integrity of the function content is checked by this way.</p>
+
+<p>        
+As we stated before we need to use strong obfuscation with this kind of techniques.</p>
+
+<h2 id="0x0a-proxy-objects-old-deprecated">0x0A Proxy Objects (OLD, deprecated)</h2>
+
+<p>        
+The proxy object is one of the most useful tools introducted recently in the world of JavaScript. This object can be used to snoop inside other objects, change its behavior (like a hook), or trigger an action under certain circumstances. For example if we want to trace every call to <strong>document.createElement</strong> and log this information we can create a proxy object:</p>
+
+<div class="language-javascript highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="kd">const</span> <span class="nx">handler</span> <span class="o">=</span> <span class="p">{</span> <span class="c1">// Our hook to keep the track</span>
+    <span class="na">apply</span><span class="p">:</span> <span class="kd">function</span> <span class="p">(</span><span class="nx">target</span><span class="p">,</span> <span class="nx">thisArg</span><span class="p">,</span> <span class="nx">args</span><span class="p">){</span>
+        <span class="nx">console</span><span class="p">.</span><span class="nx">log</span><span class="p">(</span><span class="dl">"</span><span class="s2">Intercepted a call to createElement with args: </span><span class="dl">"</span> <span class="o">+</span> <span class="nx">args</span><span class="p">);</span>
+        <span class="k">return</span> <span class="nx">target</span><span class="p">.</span><span class="nx">apply</span><span class="p">(</span><span class="nx">thisArg</span><span class="p">,</span> <span class="nx">args</span><span class="p">)</span>
+    <span class="p">}</span>
+<span class="p">}</span>
+
+<span class="nb">document</span><span class="p">.</span><span class="nx">createElement</span> <span class="o">=</span> <span class="k">new</span> <span class="nb">Proxy</span><span class="p">(</span><span class="nb">document</span><span class="p">.</span><span class="nx">createElement</span><span class="p">,</span> <span class="nx">handler</span><span class="p">)</span> <span class="c1">// Create our proxy object with our hook ready to intercept</span>
+<span class="nb">document</span><span class="p">.</span><span class="nx">createElement</span><span class="p">(</span><span class="dl">'</span><span class="s1">div</span><span class="dl">'</span><span class="p">);</span>
+</code></pre></div></div>
+
+<p>        
+Then we will see that when we call createElement its args will be logged in console:</p>
+
+<div class="language-plaintext highlighter-rouge"><div class="highlight"><pre class="highlight"><code>VM64:3 Intercepted a call to createElement with args: div
+</code></pre></div></div>
+<p>        
+That is great! We can use this to help us to debug code via the interception of some well-known functions (a là strace / ltrace). But as we saw in section <strong>“0x01 Function redefinitions”</strong> we can use this very same approach to hide or fake information, or just to run code different to what we see (you can simply replace the logic inside the hook show in the example). This kind of function hooking is far better than a simple redefinition.</p>
+
+<p>        
+Our main focus in this humble article is to provide some ideas to use as antidebugging tricks, so… can we detect if the analyst is using a proxy object? Indeed we can, but this is a cat and mouse game. For example, using the same code snippet, we can try to call <strong>toString</strong> method and catch the exception:</p>
+
+<div class="language-javascript highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c1">// Call a "virgin" createElement:</span>
+<span class="k">try</span> <span class="p">{</span>
+    <span class="nb">document</span><span class="p">.</span><span class="nx">createElement</span><span class="p">.</span><span class="nx">toString</span><span class="p">();</span>
+<span class="p">}</span> <span class="k">catch</span><span class="p">(</span><span class="nx">e</span><span class="p">){</span>
+    <span class="nx">console</span><span class="p">.</span><span class="nx">log</span><span class="p">(</span><span class="dl">"</span><span class="s2">I saw your proxy!</span><span class="dl">"</span><span class="p">);</span>
+<span class="p">}</span>
+</code></pre></div></div>
+<p>        
+Here all still ok:</p>
+<div class="language-plaintext highlighter-rouge"><div class="highlight"><pre class="highlight"><code>"function createElement() { [native code] }"
+</code></pre></div></div>
+<p>        
+But when we use the proxy…</p>
+<div class="language-javascript highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c1">//Then apply the hook</span>
+<span class="kd">const</span> <span class="nx">handler</span> <span class="o">=</span> <span class="p">{</span> 
+    <span class="na">apply</span><span class="p">:</span> <span class="kd">function</span> <span class="p">(</span><span class="nx">target</span><span class="p">,</span> <span class="nx">thisArg</span><span class="p">,</span> <span class="nx">args</span><span class="p">){</span>
+        <span class="nx">console</span><span class="p">.</span><span class="nx">log</span><span class="p">(</span><span class="dl">"</span><span class="s2">Intercepted a call to createElement with args: </span><span class="dl">"</span> <span class="o">+</span> <span class="nx">args</span><span class="p">);</span>
+        <span class="k">return</span> <span class="nx">target</span><span class="p">.</span><span class="nx">apply</span><span class="p">(</span><span class="nx">thisArg</span><span class="p">,</span> <span class="nx">args</span><span class="p">)</span>
+    <span class="p">}</span>
+<span class="p">}</span>
+<span class="nb">document</span><span class="p">.</span><span class="nx">createElement</span> <span class="o">=</span> <span class="k">new</span> <span class="nb">Proxy</span><span class="p">(</span><span class="nb">document</span><span class="p">.</span><span class="nx">createElement</span><span class="p">,</span> <span class="nx">handler</span><span class="p">);</span>
+
+<span class="c1">//Call our not-so-virgin-after-that-party createElement</span>
+<span class="k">try</span> <span class="p">{</span>
+    <span class="nb">document</span><span class="p">.</span><span class="nx">createElement</span><span class="p">.</span><span class="nx">toString</span><span class="p">();</span>
+<span class="p">}</span> <span class="k">catch</span><span class="p">(</span><span class="nx">e</span><span class="p">)</span> <span class="p">{</span>
+    <span class="nx">console</span><span class="p">.</span><span class="nx">log</span><span class="p">(</span><span class="dl">"</span><span class="s2">I saw your proxy!</span><span class="dl">"</span><span class="p">);</span>
+<span class="p">}</span>
+</code></pre></div></div>
+<p>        
+Yep, we could detect that proxy:</p>
+<div class="language-plaintext highlighter-rouge"><div class="highlight"><pre class="highlight"><code>VM391:13 I saw your proxy!
+</code></pre></div></div>
+<p>        
+As we said: this is just a mouse and cat game. We can add the toString method:</p>
+
+<div class="language-javascript highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="kd">const</span> <span class="nx">handler</span> <span class="o">=</span> <span class="p">{</span> 
+    <span class="na">apply</span><span class="p">:</span> <span class="kd">function</span> <span class="p">(</span><span class="nx">target</span><span class="p">,</span> <span class="nx">thisArg</span><span class="p">,</span> <span class="nx">args</span><span class="p">){</span>
+        <span class="nx">console</span><span class="p">.</span><span class="nx">log</span><span class="p">(</span><span class="dl">"</span><span class="s2">Intercepted a call to createElement with args: </span><span class="dl">"</span> <span class="o">+</span> <span class="nx">args</span><span class="p">);</span>
+        <span class="k">return</span> <span class="nx">target</span><span class="p">.</span><span class="nx">apply</span><span class="p">(</span><span class="nx">thisArg</span><span class="p">,</span> <span class="nx">args</span><span class="p">)</span>
+    <span class="p">}</span>
+<span class="p">}</span>
+<span class="nb">document</span><span class="p">.</span><span class="nx">createElement</span> <span class="o">=</span> <span class="k">new</span> <span class="nb">Proxy</span><span class="p">(</span><span class="nb">document</span><span class="p">.</span><span class="nx">createElement</span><span class="p">,</span> <span class="nx">handler</span><span class="p">);</span>
+<span class="nb">document</span><span class="p">.</span><span class="nx">createElement</span> <span class="o">=</span> <span class="nb">Function</span><span class="p">.</span><span class="nx">prototype</span><span class="p">.</span><span class="nx">toString</span><span class="p">.</span><span class="nx">bind</span><span class="p">(</span><span class="nb">document</span><span class="p">.</span><span class="nx">createElement</span><span class="p">);</span> <span class="c1">//Add toString</span>
+<span class="c1">//Call our not-so-virgin-after-that-party createElement</span>
+<span class="k">try</span> <span class="p">{</span>
+    <span class="nb">document</span><span class="p">.</span><span class="nx">createElement</span><span class="p">.</span><span class="nx">toString</span><span class="p">();</span>
+<span class="p">}</span> <span class="k">catch</span><span class="p">(</span><span class="nx">e</span><span class="p">)</span> <span class="p">{</span>
+    <span class="nx">console</span><span class="p">.</span><span class="nx">log</span><span class="p">(</span><span class="dl">"</span><span class="s2">I saw your proxy!</span><span class="dl">"</span><span class="p">);</span>
+<span class="p">}</span>
+</code></pre></div></div>
+<p>        
+Now our detection will fail:</p>
+<div class="language-plaintext highlighter-rouge"><div class="highlight"><pre class="highlight"><code>"function createElement() { [native code] }"
+</code></pre></div></div>
+
+<h2 id="0x0b-proxy-objects">0x0B Proxy Objects</h2>
+<p>        
+The exception trick can not be used anymore. Luckly, we can still detecting the use of proxy objects via <strong>toString</strong> length. For example, a naive <code class="language-plaintext highlighter-rouge">document.createElement</code> has a size of 42 (Chrome):</p>
+
+<div class="language-javascript highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="nb">document</span><span class="p">.</span><span class="nx">createElement</span><span class="p">.</span><span class="nx">toString</span><span class="p">().</span><span class="nx">length</span>
+<span class="mi">42</span>
+</code></pre></div></div>
+<p>        
+On the other hand, this value will change when we create a proxy:</p>
+
+<div class="language-javascript highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="kd">const</span> <span class="nx">handler</span> <span class="o">=</span> <span class="p">{</span>
+    <span class="na">apply</span><span class="p">:</span> <span class="kd">function</span><span class="p">(</span><span class="nx">target</span><span class="p">,</span> <span class="nx">thisArg</span><span class="p">,</span> <span class="nx">args</span><span class="p">)</span> <span class="p">{</span>
+        <span class="nx">console</span><span class="p">.</span><span class="nx">log</span><span class="p">(</span><span class="dl">"</span><span class="s2">Intercepted call</span><span class="dl">"</span><span class="p">);</span>
+        <span class="k">return</span> <span class="nx">target</span><span class="p">.</span><span class="nx">apply</span><span class="p">(</span><span class="nx">thisArg</span><span class="p">,</span> <span class="nx">args</span><span class="p">);</span>
+    <span class="p">}</span>
+<span class="p">}</span>
+
+<span class="nb">document</span><span class="p">.</span><span class="nx">createElement</span> <span class="o">=</span> <span class="k">new</span> <span class="nb">Proxy</span><span class="p">(</span><span class="nb">document</span><span class="p">.</span><span class="nx">createElement</span><span class="p">,</span> <span class="nx">handler</span><span class="p">);</span>
+
+<span class="nb">document</span><span class="p">.</span><span class="nx">createElement</span><span class="p">.</span><span class="nx">toString</span><span class="p">().</span><span class="nx">length</span>
+<span class="mi">29</span>
+</code></pre></div></div>
+<p>        
+So we can do something like:</p>
+
+<div class="language-javascript highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="k">if</span> <span class="p">(</span><span class="nb">document</span><span class="p">.</span><span class="nx">createElement</span><span class="p">.</span><span class="nx">toString</span><span class="p">().</span><span class="nx">length</span> <span class="o">&lt;</span> <span class="mi">30</span><span class="p">)</span> <span class="p">{</span>
+    <span class="nx">console</span><span class="p">.</span><span class="nx">log</span><span class="p">(</span><span class="dl">"</span><span class="s2">I saw your proxy</span><span class="dl">"</span><span class="p">);</span>
+<span class="p">}</span>
+<span class="k">else</span> <span class="p">{</span>
+    <span class="nx">console</span><span class="p">.</span><span class="nx">log</span><span class="p">(</span><span class="dl">"</span><span class="s2">Not a proxy</span><span class="dl">"</span><span class="p">);</span>
+<span class="p">}</span>
+</code></pre></div></div>
+<p>        
+This trick can not be used in windoww object, but still being useful.</p>
+
+<h2 id="0x0c-restrictional-enviroments">0x0C Restrictional enviroments</h2>
+<p>        
+As we stated in the introduction, one of the things that we want is to try to detect if the code is being executed inside the right enviroment. What we call “the right enviroment” is:</p>
+
+<ul>
+  <li>The code is being executed in a browser (not an emulator, not NodeJS, …)</li>
+  <li>The code is being executed in the domain / resource destinated to it (not a local server)</li>
+</ul>
+
+<p>        
+For example, an easy check that we can perform to prove if the code is executed locally is:</p>
+
+<div class="language-javascript highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c1">// Pretty stupid idea found in commercial software</span>
+<span class="k">if</span> <span class="p">(</span><span class="nx">location</span><span class="p">.</span><span class="nx">hostname</span> <span class="o">===</span> <span class="dl">"</span><span class="s2">localhost</span><span class="dl">"</span> <span class="o">||</span> <span class="nx">location</span><span class="p">.</span><span class="nx">hostname</span> <span class="o">===</span> <span class="dl">"</span><span class="s2">127.0.0.1</span><span class="dl">"</span> <span class="o">||</span> <span class="nx">location</span><span class="p">.</span><span class="nx">hostname</span> <span class="o">===</span> <span class="dl">""</span><span class="p">)</span> <span class="p">{</span>
+    <span class="nx">console</span><span class="p">.</span><span class="nx">log</span><span class="p">(</span><span class="dl">"</span><span class="s2">Don't run me here!</span><span class="dl">"</span><span class="p">)</span>
+<span class="p">}</span>
+
+</code></pre></div></div>
+<p>        
+If we run this JavaScript snippet inside a local html we will see the message:</p>
+<div class="language-plaintext highlighter-rouge"><div class="highlight"><pre class="highlight"><code>VM28:3 Don't run me here!
+</code></pre></div></div>
+<p>        
+Following this idea another option to check is the handler used to open the document (something like <code class="language-plaintext highlighter-rouge">if (location.protocol == 'file:'){...}</code>) or try to test via HTTP requests if other resources (images, css, etc.) are available. Of course all of these methods are extremely easy to bypass.</p>
+
+<p>        
+A bit more interesting idea is to avoid the execution if the code is executed in NodeJS (or as we repated in this article: change the flow to a faked path). This is dangerous but I saw in the wild people using NodeJS to <a href="https://www.tarlogic.com/blog/automatizando-desafios-javascript-nodejs-python/">solve JavaScript challenges and bypass anti-bruteforcing mitigations</a>.</p>
+
+<p>        
+We can try to detect the existence of objects that only exists in a browser context:</p>
+
+<div class="language-javascript highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c1">//Under NodeJS</span>
+   <span class="k">try</span> <span class="p">{</span> 
+<span class="p">..</span>   <span class="nx">console</span><span class="p">.</span><span class="nx">log</span><span class="p">(</span><span class="nb">window</span><span class="p">);</span> 
+   <span class="p">}</span> <span class="k">catch</span><span class="p">(</span><span class="nx">e</span><span class="p">){</span> 
+<span class="p">..</span>      <span class="nx">console</span><span class="p">.</span><span class="nx">log</span><span class="p">(</span><span class="dl">"</span><span class="s2">NodeJS detected!!!!</span><span class="dl">"</span><span class="p">);</span> 
+   <span class="p">}</span>
+ 
+<span class="nx">NodeJS</span> <span class="nx">detected</span><span class="o">!!!!</span>
+</code></pre></div></div>
+<p>        
+And viceversa: in NodeJS we have objects that does not exists in a browser context.</p>
+
+<div class="language-javascript highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c1">//Under the browser</span>
+<span class="nx">console</span><span class="p">.</span><span class="nx">log</span><span class="p">(</span><span class="nb">global</span><span class="p">)</span>
+<span class="nx">VM104</span><span class="p">:</span><span class="mi">1</span> <span class="nx">Uncaught</span> <span class="nx">ReferenceError</span><span class="p">:</span> <span class="nb">global</span> <span class="nx">is</span> <span class="nx">not</span> <span class="nx">defined</span>
+    <span class="nx">at</span> <span class="o">&lt;</span><span class="nx">anonymous</span><span class="o">&gt;</span><span class="p">:</span><span class="mi">1</span><span class="p">:</span><span class="mi">13</span>
+
+<span class="c1">//Under NodeJS</span>
+  <span class="nx">console</span><span class="p">.</span><span class="nx">log</span><span class="p">(</span><span class="nb">global</span><span class="p">)</span>
+<span class="p">{</span> <span class="nl">console</span><span class="p">:</span> 
+   <span class="nx">Console</span> <span class="p">{</span>
+     <span class="nl">log</span><span class="p">:</span> <span class="p">[</span><span class="nb">Function</span><span class="p">:</span> <span class="nx">bound</span> <span class="nx">log</span><span class="p">],...</span>
+     <span class="p">...</span>
+</code></pre></div></div>
+<p>        
+We can search for tons of metadata that exists only in a browser. Some ideas of this kind that we can retrieve can be seen in the <a href="https://panopticlick.eff.org">Panopticlick Project</a>.</p>
+
+<h2 id="0x0d-unimplemented-syntax">0x0D Unimplemented syntax</h2>
+<p>        
+Most tools used to debug / sandbox JavaScript code (JSDetox, JSUnpack, etc.) has old engines, so we can use syntax quirks that are recently implemented to break the parser. For example, the exponential operator (<strong>**</strong>) can not be parsed by JSUnpack (<strong>SyntaxError: Missing) after argument list</strong>) and JSDetox (<strong>Unexpected token *</strong>).</p>
+
+<p>        
+Another trick related with syntax is the usage of <a href="https://hacks.mozilla.org/2015/05/es6-in-depth-destructuring/">destructuring assignment</a> to set values. For example, a simple <code class="language-plaintext highlighter-rouge">window.top.location = 'JavaScript:alert(1337)'</code> can be expressed as `[{0:top[(0).toString.call(477066499943,30)]}] = [[‘JavaScript:alert(1337)’]]. Old parsers will break with this syntax <strong>:)</strong> .</p>
+
+<h2 id="0x0e-webgl">0x0E WebGL</h2>
+<p>        
+We will not talk about anti-reversing or obfuscation inside WebGL because you can find tons of information in the net (and WebGL is dark and full of terrors). Instead of that we will mention the use of WebGL to process data and interact with the JavaScript, so if someone tries to “emulate” our snippet of JavaScript he will need to provide WebGL support to his emulator.</p>
+
+<p>        
+We can implement a simple algorithm (like a multicolor fractal, for example) to create images based on various seeds, then extract the value of pixels at predefined positions and use it as key to decrypt code-blocks. I want to talk in deep about this topic in the future, so I let this section as a stub :P</p>
+
+<h2 id="final-words">Final words</h2>
+<p>        
+I hope this collection of tricks can be helpful for you. If you know more, or notice any error or possible improvement of this article, feel free to ping me at my twitter <a href="https://twitter.com/TheXC3LL">@TheXC3LL</a>.</p>
+
+<p>        
+Kudos to <a href="https://twitter.com/cgvwzq">@cgvwzq</a> for his help :)</p>
+
+<p>Byt3z!</p>
+
+
+
+
+
+      </section>
+      <footer>
+        
+        <p>This project is maintained by <a href="https://github.com/pages-themes">pages-themes</a></p>
+        
+        <p><small>Hosted on GitHub Pages &mdash; Theme by <a href="https://github.com/orderedlist">orderedlist</a></small></p>
+      </footer>
+    </div>
+    <script src="/assets/js/scale.fix.js"></script>
+  </body>
+</html>

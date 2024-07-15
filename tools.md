@@ -11,7 +11,7 @@ __Description__<br>
 __Author__<br>
 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;[@TheXC3LL](https://twitter.com/TheXC3LL)<br>
 __Download__<br>
-&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;[https://github.com/TarlogicSecurity/Chankro]()
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;[https://github.com/TarlogicSecurity/Chankro](https://github.com/TarlogicSecurity/Chankro)
 
 # Mssqlproxy
 __Description__<br>
@@ -19,7 +19,7 @@ __Description__<br>
 __Author__<br>
 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;[@xassiz](https://twitter.com/xassiz) & [@TheXC3LL](https://twitter.com/TheXC3LL)<br>
 __Download__<br>
-&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;[https://github.com/blackarrowsec/mssqlproxy]()
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;[https://github.com/blackarrowsec/mssqlproxy](https://github.com/blackarrowsec/mssqlproxy)
 
 # Arecibo
 __Description__<br>
@@ -27,7 +27,7 @@ __Description__<br>
 __Author__<br>
 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;[@TheXC3LL](https://twitter.com/TheXC3LL) & [@xassiz](https://twitter.com/xassiz) <br>
 __Download__<br>
-&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;[https://github.com/TarlogicSecurity/Arecibo]()
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;[https://github.com/TarlogicSecurity/Arecibo](https://github.com/TarlogicSecurity/Arecibo)
 
 # F-Isolation
 __Description__<br>
@@ -35,4 +35,12 @@ __Description__<br>
 __Author__<br>
 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;[@lowSoA](https://twitter.com/lowSoA) & [@TheXC3LL](https://twitter.com/TheXC3LL) <br>
 __Download__<br>
-&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;[https://gist.github.com/X-C3LL/20a5af5c692dbaae551e32fcf99d25f2]()
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;[https://gist.github.com/X-C3LL/20a5af5c692dbaae551e32fcf99d25f2](https://gist.github.com/X-C3LL/20a5af5c692dbaae551e32fcf99d25f2)
+
+# ArcServe Explotation Tooling
+__Description__<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;Collection of scripts to help pentesting ArcServe UDP platforms.<br>
+__Author__<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;[@TheXC3LL](https://twitter.com/TheXC3LL) <br>
+__Download__<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;[https://github.com/mdsecactivebreach/CVE-2023-26258-ArcServe](https://github.com/mdsecactivebreach/CVE-2023-26258-ArcServe)

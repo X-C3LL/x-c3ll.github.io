@@ -1,0 +1,409 @@
+<!DOCTYPE html>
+<html lang="en-US">
+  <head>
+    <meta charset="UTF-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+
+<!-- Begin Jekyll SEO tag v2.8.0 -->
+<title>Searching systematically for PHP disable_functions bypasses | Doomsday Vault</title>
+<meta name="generator" content="Jekyll v3.9.5" />
+<meta property="og:title" content="Searching systematically for PHP disable_functions bypasses" />
+<meta name="author" content="X-C3LL" />
+<meta property="og:locale" content="en_US" />
+<meta name="description" content="Some ideas about how to extract hidden parameters in PHP functions and how to find potential bypasses" />
+<meta property="og:description" content="Some ideas about how to extract hidden parameters in PHP functions and how to find potential bypasses" />
+<link rel="canonical" href="http://localhost:4000/posts/2018/12/09/find-bypass-disable_functions.html" />
+<meta property="og:url" content="http://localhost:4000/posts/2018/12/09/find-bypass-disable_functions.html" />
+<meta property="og:site_name" content="Doomsday Vault" />
+<meta property="og:type" content="article" />
+<meta property="article:published_time" content="2018-12-09T14:00:00+01:00" />
+<meta name="twitter:card" content="summary" />
+<meta property="twitter:title" content="Searching systematically for PHP disable_functions bypasses" />
+<script type="application/ld+json">
+{"@context":"https://schema.org","@type":"BlogPosting","author":{"@type":"Person","name":"X-C3LL"},"dateModified":"2018-12-09T14:00:00+01:00","datePublished":"2018-12-09T14:00:00+01:00","description":"Some ideas about how to extract hidden parameters in PHP functions and how to find potential bypasses","headline":"Searching systematically for PHP disable_functions bypasses","mainEntityOfPage":{"@type":"WebPage","@id":"http://localhost:4000/posts/2018/12/09/find-bypass-disable_functions.html"},"publisher":{"@type":"Organization","logo":{"@type":"ImageObject","url":"http://localhost:4000/assets/img/logo.jpg"},"name":"X-C3LL"},"url":"http://localhost:4000/posts/2018/12/09/find-bypass-disable_functions.html"}</script>
+<!-- End Jekyll SEO tag -->
+
+    <link rel="stylesheet" href="/assets/css/style.css?v=c27a30cb27997bd3ed45ba5a77bd97bd27cbeb64">
+    <!--[if lt IE 9]>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html5shiv/3.7.3/html5shiv.min.js"></script>
+    <![endif]-->
+    <!-- start custom head snippets, customize with your own _includes/head-custom.html file -->
+
+<!-- Setup Google Analytics -->
+
+
+
+<!-- You can set your favicon here -->
+<!-- link rel="shortcut icon" type="image/x-icon" href="/favicon.ico" -->
+
+<!-- end custom head snippets -->
+
+  </head>
+  <body>
+    <div class="wrapper">
+      <header>
+
+        <h1><a href="http://localhost:4000/">Doomsday Vault</a></h1>
+
+        
+          <img src="/assets/img/logo.jpg" alt="Logo" />
+        
+
+        <p>X-C3LL's Personal Blog :)</p>
+
+
+        
+        <ul class="downloads">
+          <li><a href="https://twitter.com/TheXC3LL">@TheXC3LL<strong>Twitter</strong></a></li>
+          <li><a href="https://www.linkedin.com/in/thexc3ll/">thexc3ll<strong>LinkedIn</strong></a></li>
+          <li><a href="https://mastodon.social/@XC3LL">@XC3LL<strong>Mastodon</strong></a></li>
+        </ul>
+        
+               <nav>
+  <ul>
+    <li><a href="/">Home</a></li>
+  <li><a href="/about.html">About</a></li>
+    <li><a href="/cves.html">CVEs</a></li>
+    <li><a href="/tools.html">Tools</a></li>
+    <li><a href="/stuff.html">Slides & Articles</a></li>
+  <li><a href="/rss.xml">RSS</a>/<a href="/atom.xml">Atom</a></li>
+  
+</ul>
+</nav>
+      </header>
+      <section>
+
+      <small>9 December 2018</small>
+<h1>Searching systematically for PHP disable_functions bypasses</h1>
+
+
+<p>        
+In the past days a vulnerability was discovered in <strong>imap_open</strong> function (<a href="https://www.cvedetails.com/cve/cve-2018-19518">CVE-2018-19518</a>). The main problem with this issue is that a local user can abuse this vulnerability to bypass some restrictions in hardened servers, and execute OS commands, because this function usually is allowed. This kind of bypass is similar to the one based in ShellShock: someone can inject OS commands inside functions not banned by disable_functions. I wanted to find a way to discover similar bypasses in an automated way.</p>
+
+<p>        
+The main idea is to split the problem in few tasks:</p>
+
+<ol>
+  <li>Extract the parameters expected by every PHP function</li>
+  <li>Execute and trace calls to every function with the right parameters</li>
+  <li>Search in the trace for potential dangerous calls (for example, an execve)</li>
+</ol>
+
+<p>        
+Of course this is a naive approach, but this same work can be reused to help me while fuzzing… so is not an useless effort I guess <strong>:)</strong>.</p>
+
+<h2 id="0x01-extracting-the-parameters">0x01 Extracting the parameters</h2>
+<p>        
+The first thing we have to deal is a realiable way to guess or identify rightly the parameters used for every function. Of course we can parse the information from public documentation (like PHP.net for example), but some functions can have hidden parameters not documented or the documentation just name them as “mixed”. This point is important because if the function is not called correctly then our trace will miss potential calls to dangerous functions/syscalls. There are different ways to accomplish this identification, each one with its advantage and downsides, so we need to combine all of them to discover the maximum number of parameters (and <strong>what type</strong> are them).</p>
+
+<p>        
+One extremely lazy approach can be to use the class <a href="http://php.net/manual/es/class.reflectionfunction.php">ReflectionFunction</a>. Through this simple class we can obtain (from the own PHP) the name and parameters used by every function available, but it has the disadvantage of not know what type is really. We can discrimiante between “strings” and “arrays” only. An example:</p>
+
+<div class="language-php highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="cp">&lt;?php</span>
+<span class="c1">//Get all defined functions in a lazy way</span>
+<span class="nv">$all</span> <span class="o">=</span> <span class="nb">get_defined_functions</span><span class="p">();</span>
+<span class="c1">//Discard annoying functions</span>
+<span class="c1">//From https://github.com/nikic/Phuzzy</span>
+<span class="nv">$bad</span> <span class="o">=</span> <span class="k">array</span><span class="p">(</span><span class="s1">'sleep'</span><span class="p">,</span> <span class="s1">'usleep'</span><span class="p">,</span> <span class="s1">'time_nanosleep'</span><span class="p">,</span> <span class="s1">'time_sleep_until'</span><span class="p">,</span><span class="s1">'pcntl_sigwaitinfo'</span><span class="p">,</span> <span class="s1">'pcntl_sigtimedwait'</span><span class="p">,</span>
+                        <span class="s1">'readline'</span><span class="p">,</span> <span class="s1">'readline_read_history'</span><span class="p">,</span><span class="s1">'dns_get_record'</span><span class="p">,</span><span class="s1">'posix_kill'</span><span class="p">,</span> <span class="s1">'pcntl_alarm'</span><span class="p">,</span><span class="s1">'set_magic_quotes_runtime'</span><span class="p">,</span><span class="s1">'readline_callback_handler_install'</span><span class="p">,);</span>
+<span class="nv">$all</span> <span class="o">=</span> <span class="nb">array_diff</span><span class="p">(</span><span class="nv">$all</span><span class="p">[</span><span class="s2">"internal"</span><span class="p">],</span> <span class="nv">$bad</span><span class="p">);</span>
+
+<span class="k">foreach</span> <span class="p">(</span><span class="nv">$all</span> <span class="k">as</span> <span class="nv">$function</span><span class="p">)</span> <span class="p">{</span>
+    <span class="nv">$parameters</span> <span class="o">=</span> <span class="s2">"</span><span class="nv">$function</span><span class="s2"> "</span><span class="p">;</span>
+    <span class="nv">$f</span> <span class="o">=</span> <span class="k">new</span> <span class="nc">ReflectionFunction</span><span class="p">(</span><span class="nv">$function</span><span class="p">);</span>
+    <span class="k">foreach</span> <span class="p">(</span><span class="nv">$f</span><span class="o">-&gt;</span><span class="nf">getParameters</span><span class="p">()</span> <span class="k">as</span> <span class="nv">$param</span><span class="p">)</span> <span class="p">{</span>
+        <span class="k">if</span> <span class="p">(</span><span class="nv">$param</span><span class="o">-&gt;</span><span class="nf">isArray</span><span class="p">())</span> <span class="p">{</span>
+            <span class="nv">$parameters</span> <span class="mf">.</span><span class="o">=</span>  <span class="s2">"ARRAY "</span><span class="p">;</span>
+        <span class="p">}</span> <span class="k">else</span> <span class="p">{</span>
+            <span class="nv">$parameters</span> <span class="mf">.</span><span class="o">=</span> <span class="s2">"STRING "</span><span class="p">;</span>
+        <span class="p">}</span>
+    <span class="p">}</span>
+    <span class="k">echo</span> <span class="nb">substr</span><span class="p">(</span><span class="nv">$parameters</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="o">-</span><span class="mi">1</span><span class="p">);</span>
+    <span class="k">echo</span> <span class="s2">"</span><span class="se">\n</span><span class="s2">"</span><span class="p">;</span>
+<span class="p">}</span>
+<span class="cp">?&gt;</span>
+</code></pre></div></div>
+<p>        
+This code generates a list of functions that we can parse later to generate the tests where we are going to trace calls:</p>
+<div class="language-plaintext highlighter-rouge"><div class="highlight"><pre class="highlight"><code>json_last_error_msg
+spl_classes
+spl_autoload STRING STRING
+spl_autoload_extensions STRING
+spl_autoload_register STRING STRING STRING
+spl_autoload_unregister STRING
+spl_autoload_functions
+spl_autoload_call STRING
+class_parents STRING STRING
+class_implements STRING STRING
+class_uses STRING STRING
+spl_object_hash STRING
+spl_object_id STRING
+iterator_to_array STRING STRING
+iterator_count STRING
+iterator_apply STRING STRING ARRAY
+</code></pre></div></div>
+
+<p>        
+A far better approach can be to hook the function used internally by PHP to parse the parameters, as it is used in the article “<a href="http://www.libnex.org/blog/huntingforhiddenparameterswithinphpbuilt-infunctionsusingfrida">Hunting for hidden parameters within PHP built-in functions (using frida)</a>”. The authors use FRIDA to hook the function <strong>zend_parse_parameters</strong> and parse the pattern used to validate the parameters passed (if you want to know a bit more about FRIDA feel free to check my article <a href="https://x-c3ll.github.io/posts/Frida-Pwn-Adventure-3/">Hacking a game to learn FRIDA basics (Pwn Adventure 3)</a>). This approach is one of the best because with the patterns we can know what type is expecting, but has a small downside: this function is deprecated, so in the future will be not used.</p>
+
+<p>        
+The internals of PHP 7 are a bit different from PHP 5 and some APIs, like the one used for parameter parsing, are affected by those changes. The old API is string-based meanwhile the new API (used by PHP 7) is based in macros. Where we had the zend_parse_parameters function now we have the macro <strong>ZEND_PARSE_PARAMETERS_START</strong> and its family. To know more about how PHP parses the arguments feel free to check this amazing article from phpinternals.net: <a href="https://phpinternals.net/categories/zend_parameter_parsing">Zend Parameter Parsing (ZPP API)</a>. Essentially now we can not just say “Hey FRIDA! do your magic!” hooking a master key function.</p>
+
+<p>        
+If we remember, in our article <a href="https://x-c3ll.github.io/posts/PHP-extension-backdoor/">Improving PHP extensions as a persistence method</a> we saw that the md5 function was using the new ZPP API to parse the parameters:</p>
+
+<div class="language-c highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="n">ZEND_PARSE_PARAMETERS_START</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="mi">2</span><span class="p">)</span>
+		<span class="n">Z_PARAM_STR</span><span class="p">(</span><span class="n">arg</span><span class="p">)</span>
+		<span class="n">Z_PARAM_OPTIONAL</span>
+		<span class="nf">Z_PARAM_BOOL</span><span class="p">(</span><span class="n">raw_output</span><span class="p">)</span>
+<span class="n">ZEND_PARSE_PARAMETERS_END</span><span class="p">();</span>
+</code></pre></div></div>
+
+<p>        
+In order to extract the parameters, a shabby (and effective) approach is to compile PHP with symbols and use a script in GDB to parse the information. Of course there are better ways than using GDB, but recently I had to script some helpers for debugging PHP in GDB that fit really well in this other task, so I am not ashamed for reusing them. Let’s compile the last PHP version:</p>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="nb">cd</span> /tmp
+wget http://am1.php.net/distributions/php-<span class="si">$(</span>wget <span class="nt">-qO-</span> http://php.net/downloads.php | <span class="nb">grep</span> <span class="nt">-m</span> 1 h3 | <span class="nb">cut</span> <span class="nt">-d</span> <span class="s1">'"'</span> <span class="nt">-f</span> 2 | <span class="nb">cut</span> <span class="nt">-d</span> <span class="s2">"v"</span> <span class="nt">-f</span> 2<span class="si">)</span>.tar.gz
+<span class="nb">tar </span>xvf php<span class="k">*</span>.tar.gz
+<span class="nb">rm </span>php<span class="k">*</span>.tar.gz
+<span class="nb">cd </span>php<span class="k">*</span>
+./configure <span class="nv">CFLAGS</span><span class="o">=</span><span class="s2">"-g -O0"</span>
+make <span class="nt">-j10</span>
+<span class="nb">sudo </span>make <span class="nb">install</span>
+</code></pre></div></div>
+
+<p>        
+Our script for GDB will work as follows:</p>
+<ol>
+  <li>Execute  <code class="language-plaintext highlighter-rouge">list functionName</code></li>
+  <li>If <strong>ZEND_PARSE_PARAMETERS_END</strong> is not present, increment the number of lines to show in list and try again</li>
+  <li>If it is present, then break the loop and extract the lines between the macros <strong>…_START</strong> and <strong>…_END</strong></li>
+  <li>Parse the parameters between them</li>
+</ol>
+
+<p>        
+This flow of actions can be summarized in this simple snippet:</p>
+<div class="language-python highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c1"># When I do things like this I feel really bad
+# Satanism courtesy of @TheXC3LL
+</span>
+<span class="k">class</span> <span class="nc">zifArgs</span><span class="p">(</span><span class="n">gdb</span><span class="p">.</span><span class="n">Command</span><span class="p">):</span>
+    <span class="s">"Show PHP parameters used by a function when it uses PHP 7 ZPP API. Symbols needed."</span>
+
+    <span class="k">def</span> <span class="nf">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="nb">super</span> <span class="p">(</span><span class="n">zifArgs</span><span class="p">,</span> <span class="bp">self</span><span class="p">).</span><span class="n">__init__</span><span class="p">(</span><span class="s">"zifargs"</span><span class="p">,</span> <span class="n">gdb</span><span class="p">.</span><span class="n">COMMAND_SUPPORT</span><span class="p">,</span> <span class="n">gdb</span><span class="p">.</span><span class="n">COMPLETE_NONE</span><span class="p">,</span> <span class="bp">True</span><span class="p">)</span>
+
+    <span class="k">def</span> <span class="nf">invoke</span> <span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">arg</span><span class="p">,</span> <span class="n">from_tty</span><span class="p">):</span>
+        <span class="n">size</span> <span class="o">=</span> <span class="mi">10</span>
+        <span class="k">while</span> <span class="bp">True</span><span class="p">:</span>
+            <span class="k">try</span><span class="p">:</span>
+                <span class="n">sourceLines</span> <span class="o">=</span> <span class="n">gdb</span><span class="p">.</span><span class="n">execute</span><span class="p">(</span><span class="s">"list zif_"</span> <span class="o">+</span> <span class="n">arg</span><span class="p">,</span> <span class="n">to_string</span><span class="o">=</span><span class="bp">True</span><span class="p">)</span>
+            <span class="k">except</span><span class="p">:</span>
+                <span class="k">try</span><span class="p">:</span>
+                    <span class="n">sourceLines</span> <span class="o">=</span> <span class="n">gdb</span><span class="p">.</span><span class="n">execute</span><span class="p">(</span><span class="s">"list php_"</span> <span class="o">+</span> <span class="n">arg</span><span class="p">,</span> <span class="n">to_string</span><span class="o">=</span><span class="bp">True</span><span class="p">)</span>
+                <span class="k">except</span><span class="p">:</span>
+                    <span class="k">try</span><span class="p">:</span>
+                        <span class="n">sourceLines</span> <span class="o">=</span> <span class="n">gdb</span><span class="p">.</span><span class="n">execute</span><span class="p">(</span><span class="s">"list php_if_"</span> <span class="o">+</span> <span class="n">arg</span><span class="p">,</span> <span class="n">to_string</span><span class="o">=</span><span class="bp">True</span><span class="p">)</span>
+                    <span class="k">except</span><span class="p">:</span>
+                        <span class="k">print</span><span class="p">(</span><span class="s">"</span><span class="se">\033</span><span class="s">[31m</span><span class="se">\033</span><span class="s">[1mFunction "</span> <span class="o">+</span> <span class="n">arg</span> <span class="o">+</span> <span class="s">" not defined!</span><span class="se">\033</span><span class="s">[0m"</span><span class="p">)</span>
+                        <span class="k">return</span>
+            <span class="k">if</span> <span class="s">"ZEND_PARSE_PARAMETERS_END"</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">sourceLines</span><span class="p">:</span>
+                <span class="n">size</span> <span class="o">+=</span> <span class="mi">10</span>
+                <span class="n">gdb</span><span class="p">.</span><span class="n">execute</span><span class="p">(</span><span class="s">"set listsize "</span> <span class="o">+</span> <span class="nb">str</span><span class="p">(</span><span class="n">size</span><span class="p">))</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="n">gdb</span><span class="p">.</span><span class="n">execute</span><span class="p">(</span><span class="s">"set listsize 10"</span><span class="p">)</span>
+                <span class="k">break</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="n">chunk</span> <span class="o">=</span> <span class="n">sourceLines</span><span class="p">[</span><span class="n">sourceLines</span><span class="p">.</span><span class="n">index</span><span class="p">(</span><span class="s">"_START"</span><span class="p">):</span><span class="n">sourceLines</span><span class="p">.</span><span class="n">rindex</span><span class="p">(</span><span class="s">"_END"</span><span class="p">)].</span><span class="n">split</span><span class="p">(</span><span class="s">"</span><span class="se">\n</span><span class="s">"</span><span class="p">)</span>
+        <span class="k">except</span><span class="p">:</span>
+            <span class="k">print</span><span class="p">(</span><span class="s">"</span><span class="se">\033</span><span class="s">[31m</span><span class="se">\033</span><span class="s">[1mParameters not found. Try zifargs_old &lt;function&gt;</span><span class="se">\033</span><span class="s">[0m"</span><span class="p">)</span>
+            <span class="k">return</span>
+        <span class="n">params</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="k">for</span> <span class="n">x</span> <span class="ow">in</span> <span class="n">chunk</span><span class="p">:</span>
+            <span class="k">if</span> <span class="s">"Z_PARAM_ARRAY"</span> <span class="ow">in</span> <span class="n">x</span><span class="p">:</span>
+                <span class="n">params</span><span class="p">.</span><span class="n">append</span><span class="p">(</span><span class="s">"</span><span class="se">\033</span><span class="s">[31mARRAY"</span><span class="p">)</span>
+            <span class="k">if</span> <span class="s">"Z_PARAM_BOOL"</span> <span class="ow">in</span> <span class="n">x</span><span class="p">:</span>
+                <span class="n">params</span><span class="p">.</span><span class="n">append</span><span class="p">(</span><span class="s">"</span><span class="se">\033</span><span class="s">[32mBOOL"</span><span class="p">)</span>
+            <span class="k">if</span> <span class="s">"Z_PARAM_FUNC"</span> <span class="ow">in</span> <span class="n">x</span><span class="p">:</span>
+                <span class="n">params</span><span class="p">.</span><span class="n">append</span><span class="p">(</span><span class="s">"</span><span class="se">\033</span><span class="s">[33mCALLABLE"</span><span class="p">)</span>
+            <span class="k">if</span> <span class="s">"Z_PARAM_DOUBLE"</span> <span class="ow">in</span> <span class="n">x</span><span class="p">:</span>
+                <span class="n">params</span><span class="p">.</span><span class="n">append</span><span class="p">(</span><span class="s">"</span><span class="se">\033</span><span class="s">[34mDOUBLE"</span><span class="p">)</span>
+            <span class="k">if</span> <span class="s">"Z_PARAM_LONG"</span> <span class="ow">in</span> <span class="n">x</span> <span class="ow">or</span> <span class="s">"Z_PARAM_STRICT_LONG"</span> <span class="ow">in</span> <span class="n">x</span><span class="p">:</span>
+                <span class="n">params</span><span class="p">.</span><span class="n">append</span><span class="p">(</span><span class="s">"</span><span class="se">\033</span><span class="s">[36mLONG"</span><span class="p">)</span>
+            <span class="k">if</span> <span class="s">"Z_PARAM_ZVAL"</span> <span class="ow">in</span> <span class="n">x</span><span class="p">:</span>
+                <span class="n">params</span><span class="p">.</span><span class="n">append</span><span class="p">(</span><span class="s">"</span><span class="se">\033</span><span class="s">[37mMIXED"</span><span class="p">)</span>
+            <span class="k">if</span> <span class="s">"Z_PARAM_OBJECT"</span> <span class="ow">in</span> <span class="n">x</span><span class="p">:</span>
+                <span class="n">params</span><span class="p">.</span><span class="n">append</span><span class="p">(</span><span class="s">"</span><span class="se">\033</span><span class="s">[38mOBJECT"</span><span class="p">)</span>
+            <span class="k">if</span> <span class="s">"Z_PARAM_RESOURCE"</span> <span class="ow">in</span> <span class="n">x</span><span class="p">:</span>
+                <span class="n">params</span><span class="p">.</span><span class="n">append</span><span class="p">(</span><span class="s">"</span><span class="se">\033</span><span class="s">[39mRESOURCE"</span><span class="p">)</span>
+            <span class="k">if</span> <span class="s">"Z_PARAM_STR"</span> <span class="ow">in</span> <span class="n">x</span><span class="p">:</span>
+                <span class="n">params</span><span class="p">.</span><span class="n">append</span><span class="p">(</span><span class="s">"</span><span class="se">\033</span><span class="s">[35mSTRING"</span><span class="p">)</span>
+            <span class="k">if</span> <span class="s">"Z_PARAM_CLASS"</span> <span class="ow">in</span> <span class="n">x</span><span class="p">:</span>
+                <span class="n">params</span><span class="p">.</span><span class="n">append</span><span class="p">(</span><span class="s">"</span><span class="se">\033</span><span class="s">[37mCLASS"</span><span class="p">)</span>
+            <span class="k">if</span> <span class="s">"Z_PARAM_PATH"</span> <span class="ow">in</span> <span class="n">x</span><span class="p">:</span>
+                <span class="n">params</span><span class="p">.</span><span class="n">append</span><span class="p">(</span><span class="s">"</span><span class="se">\033</span><span class="s">[31mPATH"</span><span class="p">)</span>
+            <span class="k">if</span> <span class="s">"Z_PARAM_OPTIONAL"</span> <span class="ow">in</span> <span class="n">x</span><span class="p">:</span>
+                <span class="n">params</span><span class="p">.</span><span class="n">append</span><span class="p">(</span><span class="s">"</span><span class="se">\033</span><span class="s">[37mOPTIONAL"</span><span class="p">)</span>
+        <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">params</span><span class="p">)</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
+            <span class="k">print</span><span class="p">(</span><span class="s">"</span><span class="se">\033</span><span class="s">[31m</span><span class="se">\033</span><span class="s">[1mParameters not found. Try zifargs_old &lt;function&gt; or zifargs_error &lt;function&gt;</span><span class="se">\033</span><span class="s">[0m"</span><span class="p">)</span>
+            <span class="k">return</span>
+        <span class="k">print</span><span class="p">(</span><span class="s">"</span><span class="se">\033</span><span class="s">[1m"</span><span class="o">+</span><span class="s">' '</span><span class="p">.</span><span class="n">join</span><span class="p">(</span><span class="n">params</span><span class="p">)</span> <span class="o">+</span> <span class="s">"</span><span class="se">\033</span><span class="s">[0m"</span><span class="p">)</span>
+
+<span class="n">zifArgs</span><span class="p">()</span>
+</code></pre></div></div>
+<p>        
+The results are pretty good (everything after “OPTIONAL” is optional):</p>
+<div class="language-plaintext highlighter-rouge"><div class="highlight"><pre class="highlight"><code>pwndbg: loaded 171 commands. Type pwndbg [filter] for a list.
+pwndbg: created $rebase, $ida gdb functions (can be used with print/break)
+[+] Stupid GDB Helper for PHP loaded! (by @TheXC3LL)
+Reading symbols from php...done.
+pwndbg&gt; zifargs md5
+STRING OPTIONAL BOOL
+pwndbg&gt; zifargs time
+OPTIONAL LONG BOOL
+</code></pre></div></div>
+
+<p>        
+As we said before every technique has its own downside, and approach such naive can fail:</p>
+<div class="language-plaintext highlighter-rouge"><div class="highlight"><pre class="highlight"><code>pwndbg&gt; zifargs array_map
+CALLABLE
+</code></pre></div></div>
+<p>        
+The function <a href="http://php.net/manual/es/function.array-map.php">array_map</a> has an array as second parameter and our snippet could not detect it. Another technique to extract the parameters is to parse the descriptive errors generated by some functions in PHP. For example, array_map, will tell you how many parameters need:</p>
+
+<div class="language-plaintext highlighter-rouge"><div class="highlight"><pre class="highlight"><code>psyconauta@insulatergum:~/research/php/|
+⇒  php -r 'array_map();'
+
+Warning: array_map() expects at least 2 parameters, 0 given in Command line code on line 1
+</code></pre></div></div>
+<p>        
+And if we set the two parameters as strings he will warning about what kind of parameter is expecting:</p>
+<div class="language-plaintext highlighter-rouge"><div class="highlight"><pre class="highlight"><code>psyconauta@insulatergum:~/research/php/
+⇒  php -r 'array_map("aaa","bbb");'
+
+Warning: array_map() expects parameter 1 to be a valid callback, function 'aaa' not found or invalid function name in Command line code on line 1
+</code></pre></div></div>
+<p>        
+So we can use this errors to infer the parameters:</p>
+<ol>
+  <li>Call the function empty</li>
+  <li>Check errors to see how many parameteres need</li>
+  <li>Fill them with strings</li>
+  <li>Parse the expected type from warning</li>
+  <li>Change the parameter for one of the right type</li>
+  <li>Repeat from 4</li>
+</ol>
+
+<p>        
+I implemented another extremely shabby command for GDB to take this task:</p>
+<div class="language-python highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c1"># Don't let me use gdb when I am drunk
+# Sorry for this piece of code :(
+</span>
+<span class="k">class</span> <span class="nc">zifArgsError</span><span class="p">(</span><span class="n">gdb</span><span class="p">.</span><span class="n">Command</span><span class="p">):</span>
+    <span class="s">"Tries to infer parameters from PHP errors"</span>
+
+    <span class="k">def</span> <span class="nf">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="nb">super</span><span class="p">(</span><span class="n">zifArgsError</span><span class="p">,</span> <span class="bp">self</span><span class="p">).</span><span class="n">__init__</span><span class="p">(</span><span class="s">"zifargs_error"</span><span class="p">,</span> <span class="n">gdb</span><span class="p">.</span><span class="n">COMMAND_SUPPORT</span><span class="p">,</span> <span class="n">gdb</span><span class="p">.</span><span class="n">COMPLETE_NONE</span><span class="p">,</span><span class="bp">True</span><span class="p">)</span>
+
+    <span class="k">def</span> <span class="nf">invoke</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">arg</span><span class="p">,</span> <span class="n">from_tty</span><span class="p">):</span>
+        <span class="n">payload</span> <span class="o">=</span> <span class="s">"&lt;?php "</span> <span class="o">+</span> <span class="n">arg</span> <span class="o">+</span> <span class="s">"();?&gt;"</span>
+        <span class="nb">file</span> <span class="o">=</span> <span class="nb">open</span><span class="p">(</span><span class="s">"/tmp/.zifargs"</span><span class="p">,</span> <span class="s">"w"</span><span class="p">)</span>
+        <span class="nb">file</span><span class="p">.</span><span class="n">write</span><span class="p">(</span><span class="n">payload</span><span class="p">)</span>
+        <span class="nb">file</span><span class="p">.</span><span class="n">close</span><span class="p">()</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="n">output</span> <span class="o">=</span> <span class="nb">str</span><span class="p">(</span><span class="n">subprocess</span><span class="p">.</span><span class="n">check_output</span><span class="p">(</span><span class="s">"php /tmp/.zifargs 2&gt;&amp;1"</span><span class="p">,</span> <span class="n">shell</span><span class="o">=</span><span class="bp">True</span><span class="p">))</span>
+        <span class="k">except</span><span class="p">:</span>
+            <span class="k">print</span><span class="p">(</span><span class="s">"</span><span class="se">\033</span><span class="s">[31m</span><span class="se">\033</span><span class="s">[1mFunction "</span> <span class="o">+</span> <span class="n">arg</span> <span class="o">+</span> <span class="s">" not defined!</span><span class="se">\033</span><span class="s">[0m"</span><span class="p">)</span>
+            <span class="k">return</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="n">number</span> <span class="o">=</span> <span class="n">output</span><span class="p">[</span><span class="n">output</span><span class="p">.</span><span class="n">index</span><span class="p">(</span><span class="s">"at least "</span><span class="p">)</span><span class="o">+</span><span class="mi">9</span><span class="p">:</span><span class="n">output</span><span class="p">.</span><span class="n">index</span><span class="p">(</span><span class="s">"at least "</span><span class="p">)</span><span class="o">+</span><span class="mi">10</span><span class="p">]</span>
+        <span class="k">except</span><span class="p">:</span>
+            <span class="n">number</span> <span class="o">=</span> <span class="n">output</span><span class="p">[</span><span class="n">output</span><span class="p">.</span><span class="n">index</span><span class="p">(</span><span class="s">"exactly "</span><span class="p">)</span><span class="o">+</span><span class="mi">8</span><span class="p">:</span><span class="n">output</span><span class="p">.</span><span class="n">index</span><span class="p">(</span><span class="s">"exactly"</span><span class="p">)</span><span class="o">+</span><span class="mi">9</span><span class="p">]</span>
+        <span class="k">print</span><span class="p">(</span><span class="s">"</span><span class="se">\033</span><span class="s">[33m</span><span class="se">\033</span><span class="s">[1m"</span> <span class="o">+</span> <span class="n">arg</span><span class="o">+</span> <span class="s">"(</span><span class="se">\033</span><span class="s">[31m"</span> <span class="o">+</span> <span class="n">number</span> <span class="o">+</span> <span class="s">"</span><span class="se">\033</span><span class="s">[33m): </span><span class="se">\033</span><span class="s">[0m"</span><span class="p">)</span>
+        <span class="n">params</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="n">infered</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="n">i</span> <span class="o">=</span> <span class="mi">0</span>
+        <span class="k">while</span> <span class="bp">True</span><span class="p">:</span>
+            <span class="n">payload</span> <span class="o">=</span> <span class="s">"&lt;?php "</span> <span class="o">+</span> <span class="n">arg</span> <span class="o">+</span> <span class="s">"("</span>
+            <span class="k">for</span> <span class="n">x</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span><span class="nb">int</span><span class="p">(</span><span class="n">number</span><span class="p">)</span><span class="o">-</span><span class="nb">len</span><span class="p">(</span><span class="n">params</span><span class="p">)):</span>
+                <span class="n">params</span><span class="p">.</span><span class="n">append</span><span class="p">(</span><span class="s">"'aaa'"</span><span class="p">)</span>
+            <span class="n">payload</span> <span class="o">+=</span> <span class="s">','</span><span class="p">.</span><span class="n">join</span><span class="p">(</span><span class="n">params</span><span class="p">)</span> <span class="o">+</span> <span class="s">"); ?&gt;"</span>
+            <span class="nb">file</span> <span class="o">=</span> <span class="nb">open</span><span class="p">(</span><span class="s">"/tmp/.zifargs"</span><span class="p">,</span> <span class="s">"w"</span><span class="p">)</span>
+            <span class="nb">file</span><span class="p">.</span><span class="n">write</span><span class="p">(</span><span class="n">payload</span><span class="p">)</span>
+            <span class="nb">file</span><span class="p">.</span><span class="n">close</span><span class="p">()</span>
+            <span class="n">output</span> <span class="o">=</span> <span class="nb">str</span><span class="p">(</span><span class="n">subprocess</span><span class="p">.</span><span class="n">check_output</span><span class="p">(</span><span class="s">"php /tmp/.zifargs 2&gt;&amp;1"</span><span class="p">,</span> <span class="n">shell</span><span class="o">=</span><span class="bp">True</span><span class="p">))</span>
+            <span class="c1">#print(output)
+</span>            <span class="k">if</span> <span class="s">","</span> <span class="ow">in</span> <span class="n">output</span><span class="p">:</span>
+                <span class="n">separator</span> <span class="o">=</span> <span class="s">","</span>
+            <span class="k">elif</span> <span class="s">" file "</span> <span class="ow">in</span> <span class="n">output</span><span class="p">:</span>
+                <span class="n">params</span><span class="p">[</span><span class="n">i</span><span class="p">]</span> <span class="o">=</span> <span class="s">"/etc/passwd"</span> <span class="c1"># Don't run this as root, for the god sake.
+</span>                <span class="n">infered</span><span class="p">.</span><span class="n">append</span><span class="p">(</span><span class="s">"</span><span class="se">\033</span><span class="s">[31mPATH"</span><span class="p">)</span>
+                <span class="n">i</span> <span class="o">+=</span><span class="mi">1</span>
+            <span class="k">elif</span> <span class="s">" in "</span> <span class="ow">in</span> <span class="n">output</span><span class="p">:</span>
+                <span class="n">separator</span> <span class="o">=</span> <span class="s">" in "</span>
+
+            <span class="k">try</span><span class="p">:</span>
+                <span class="n">dataType</span> <span class="o">=</span> <span class="n">output</span><span class="p">[:</span><span class="n">output</span><span class="p">.</span><span class="n">rindex</span><span class="p">(</span><span class="n">separator</span><span class="p">)]</span>
+                <span class="n">dataType</span> <span class="o">=</span> <span class="n">dataType</span><span class="p">[</span><span class="n">dataType</span><span class="p">.</span><span class="n">rindex</span><span class="p">(</span><span class="s">" "</span><span class="p">)</span><span class="o">+</span><span class="mi">1</span><span class="p">:].</span><span class="n">lower</span><span class="p">()</span>
+                <span class="k">if</span> <span class="n">dataType</span> <span class="o">==</span> <span class="s">"array"</span><span class="p">:</span>
+                    <span class="n">params</span><span class="p">[</span><span class="n">i</span><span class="p">]</span> <span class="o">=</span> <span class="s">"array('a')"</span>
+                    <span class="n">infered</span><span class="p">.</span><span class="n">append</span><span class="p">(</span><span class="s">"</span><span class="se">\033</span><span class="s">[31mARRAY"</span><span class="p">)</span>
+                <span class="k">if</span> <span class="n">dataType</span> <span class="o">==</span> <span class="s">"callback"</span><span class="p">:</span>
+                    <span class="n">params</span><span class="p">[</span><span class="n">i</span><span class="p">]</span> <span class="o">=</span> <span class="s">"'var_dump'"</span>
+                    <span class="n">infered</span><span class="p">.</span><span class="n">append</span><span class="p">(</span><span class="s">"</span><span class="se">\033</span><span class="s">[33mCALLABLE"</span><span class="p">)</span>
+                <span class="k">if</span> <span class="n">dataType</span> <span class="o">==</span> <span class="s">"int"</span><span class="p">:</span>
+                    <span class="n">params</span><span class="p">[</span><span class="n">i</span><span class="p">]</span> <span class="o">=</span> <span class="s">"1337"</span>
+                    <span class="n">infered</span><span class="p">.</span><span class="n">append</span><span class="p">(</span><span class="s">"</span><span class="se">\033</span><span class="s">[36mINTEGER"</span><span class="p">)</span>
+                <span class="n">i</span> <span class="o">+=</span> <span class="mi">1</span>
+                <span class="c1">#print(params)
+</span>            <span class="k">except</span><span class="p">:</span>
+                <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">infered</span><span class="p">)</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">:</span>
+                    <span class="k">print</span><span class="p">(</span><span class="s">"</span><span class="se">\033</span><span class="s">[1m"</span> <span class="o">+</span> <span class="s">' '</span><span class="p">.</span><span class="n">join</span><span class="p">(</span><span class="n">infered</span><span class="p">)</span> <span class="o">+</span> <span class="s">"</span><span class="se">\033</span><span class="s">[0m"</span><span class="p">)</span>
+                    <span class="k">return</span>
+                <span class="k">else</span><span class="p">:</span>
+                    <span class="k">print</span><span class="p">(</span><span class="s">"</span><span class="se">\033</span><span class="s">[31m</span><span class="se">\033</span><span class="s">[1mCould not retrieve parameters from "</span> <span class="o">+</span> <span class="n">arg</span> <span class="o">+</span> <span class="s">"</span><span class="se">\033</span><span class="s">[0m"</span><span class="p">)</span>
+                    <span class="k">return</span>
+</code></pre></div></div>
+<p>        
+Try it with array_map:</p>
+<div class="language-plaintext highlighter-rouge"><div class="highlight"><pre class="highlight"><code>pwndbg&gt; zifargs_error array_map
+array_map(2):
+CALLABLE ARRAY
+</code></pre></div></div>
+<p>        
+Until now we explained different techniques that can be combined to obtain automatically the parameters needed to run correctly (or almost) every PHP function. As I said before, this techniques can be used too for fuzzing in order to reach additional codepaths, or to run disregarded fuzzing instances. Let’s see now how we can use the information gathered.</p>
+
+<h2 id="0x02-getting-and-analyzing-traces">0x02 Getting and analyzing traces</h2>
+<p>        
+The simplest way to obtain a trace is using well-known tools like strace and ltrace. With few lines of bash we can parse the logs generated in the previous step with the function name and parameters, run the tracer and save the logs to a file. Let’s analyze the log generated by the mail() function for example:</p>
+
+<div class="language-plaintext highlighter-rouge"><div class="highlight"><pre class="highlight"><code>⇒  strace -f /usr/bin/php -r 'mail("aaa","aaa","aaa","aaa");' 2&gt;&amp;1 | grep exe
+execve("/usr/bin/php", ["/usr/bin/php", "-r", "mail(\"aaa\",\"aaa\",\"aaa\",\"aaa\");"], [/* 28 vars */]) = 0
+[pid   471] execve("/bin/sh", ["sh", "-c", "/usr/sbin/sendmail -t -i "], [/* 28 vars */] &lt;unfinished ...&gt;
+[pid   471] &lt;... execve resumed&gt; )      = 0
+[pid   472] execve("/usr/sbin/sendmail", ["/usr/sbin/sendmail", "-t", "-i"], [/* 28 vars */]) = -1 ENOENT (No such file or directory)
+</code></pre></div></div>
+<p>        
+Did you see that <strong>execve()</strong> with the sendmail? That means that this function can be abused in order to bypass disable_functions (as far as we have allowed putenv to manipulate the LD_PRELOAD ). Indeed this is how <a href="https://github.com/TarlogicSecurity/Chankro">CHANKRO</a> works: if we can set environment variables, we can set LD_PRELOAD to load a malicious file when an external binary (as we see in the log trace) is called. Just run the script, wait, and execute few greps to check for juicy calls. <strong>Easy peasy :)</strong></p>
+
+<h2 id="0x03-final-words">0x03 Final words</h2>
+<p>        
+Automate the parameter extraction can be a bit tricky so I decide to write this article to contribute my grain of sand. Months ago I read <a href="http://www.libnex.org/blog/huntingforhiddenparameterswithinphpbuilt-infunctionsusingfrida">this article</a> where FRIDA is used to hook zend_parse_parameters and I wanted to complete a bit more this information for new-comers on PHP internals. The imap_open() vulnerability was a perfect excuse to write about the topic <strong>:)</strong>.</p>
+
+<p>        
+If you find useful this article, or wanna point me to an error or a typo, feel free to contact me at twitter <a href="https://twitter.com/TheXC3LL">@TheXC3LL</a>.</p>
+
+
+
+
+      </section>
+      <footer>
+        
+        <p>This project is maintained by <a href="https://github.com/pages-themes">pages-themes</a></p>
+        
+        <p><small>Hosted on GitHub Pages &mdash; Theme by <a href="https://github.com/orderedlist">orderedlist</a></small></p>
+      </footer>
+    </div>
+    <script src="/assets/js/scale.fix.js"></script>
+  </body>
+</html>

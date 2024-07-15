@@ -1,0 +1,230 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom">
+  <channel>
+    <title> - Articles</title>
+    <description>X-C3LL&apos;s Personal Blog :)</description>
+    <link>
+    http://localhost:4000</link>
+    
+      <item>
+        <title>That loyal MySQL is a rogue one: a tale of a (partially) failed idea</title>
+        
+          <description>Hooking mysqld to steal net-NTLM hashes from developers.</description>
+        
+        <pubDate>Sun, 12 Jul 2020 03:03:37 +0200</pubDate>
+        <link>/posts/2020/07/12/rogue-mysqld-steal-net-ntlm.html</link>
+        <guid isPermaLink="true">http://localhost:4000/posts/2020/07/12/rogue-mysqld-steal-net-ntlm.html</guid>
+      </item>
+    
+      <item>
+        <title>GetEnvironmentVariable as an alternative to WriteProcessMemory in process injections</title>
+        
+          <description>Brief description of how to use GetEnvironmentVariable as an alternative to WriteProcessMemory</description>
+        
+        <pubDate>Thu, 28 May 2020 13:22:33 +0200</pubDate>
+        <link>/posts/2020/05/28/GetEnvironmentVariable-Process-Injection.html</link>
+        <guid isPermaLink="true">http://localhost:4000/posts/2020/05/28/GetEnvironmentVariable-Process-Injection.html</guid>
+      </item>
+    
+      <item>
+        <title>From memory corruption to disable_functions bypass: understanding PHP exploits</title>
+        
+          <description>Overview of PHP internals related with disable_functions and how common exploits works</description>
+        
+        <pubDate>Sun, 09 Feb 2020 02:13:37 +0100</pubDate>
+        <link>/posts/2020/02/09/UAF-PHP-disable_functions.html</link>
+        <guid isPermaLink="true">http://localhost:4000/posts/2020/02/09/UAF-PHP-disable_functions.html</guid>
+      </item>
+    
+      <item>
+        <title>Tunneling traffic through MySQL service (or your mysqld is my new SOCKS5)</title>
+        
+          <description>Description of how to pivot though the MySQL service. Turning MySQL into a SOCKS5 that can be used by proxychains.</description>
+        
+        <pubDate>Fri, 06 Dec 2019 14:48:08 +0100</pubDate>
+        <link>/posts/2019/12/06/Pivoting-MySQL-Proxy.html</link>
+        <guid isPermaLink="true">http://localhost:4000/posts/2019/12/06/Pivoting-MySQL-Proxy.html</guid>
+      </item>
+    
+      <item>
+        <title>Isolating the logic of an encrypted protocol with LIEF and kaitai</title>
+        
+          <description>Article describing how we used LIEF to isolate target functions and kaitai to describe the protocol.</description>
+        
+        <pubDate>Fri, 01 Nov 2019 13:00:00 +0100</pubDate>
+        <link>/posts/2019/11/01/blackbox-lief-kaitai.html</link>
+        <guid isPermaLink="true">http://localhost:4000/posts/2019/11/01/blackbox-lief-kaitai.html</guid>
+      </item>
+    
+      <item>
+        <title>CSS Injection Primitives</title>
+        
+          <description>Collection of CSS / HTML primitives. Tricks to use as an alternative to JavaScript (exfiltration, timing, etc.)</description>
+        
+        <pubDate>Wed, 16 Oct 2019 03:00:00 +0200</pubDate>
+        <link>/posts/2019/10/16/CSS-Injection-Primitives.html</link>
+        <guid isPermaLink="true">http://localhost:4000/posts/2019/10/16/CSS-Injection-Primitives.html</guid>
+      </item>
+    
+      <item>
+        <title>Remote Code Execution in Aruba Mobility Controller (ArubaOS) - CVE-2018-7081</title>
+        
+          <description>Walkthrough of discovering CVE-2018-7081 (memory corruption). Proof of Concept inside :)</description>
+        
+        <pubDate>Wed, 04 Sep 2019 03:00:00 +0200</pubDate>
+        <link>/posts/2019/09/04/CVE-2018-7081-RCE-ArubaOS.html</link>
+        <guid isPermaLink="true">http://localhost:4000/posts/2019/09/04/CVE-2018-7081-RCE-ArubaOS.html</guid>
+      </item>
+    
+      <item>
+        <title>Stealthier communications &amp; Port Knocking via Windows Filtering Platform (WFP)</title>
+        
+          <description>Example of how WFP can be used to communicate with an infected machine</description>
+        
+        <pubDate>Wed, 05 Jun 2019 15:30:07 +0200</pubDate>
+        <link>/posts/2019/06/05/windows-port-knocking.html</link>
+        <guid isPermaLink="true">http://localhost:4000/posts/2019/06/05/windows-port-knocking.html</guid>
+      </item>
+    
+      <item>
+        <title>Rethinking the inotify API as an offensive helper</title>
+        
+          <description>Examples of how the inotify API can be useful for the Red Team</description>
+        
+        <pubDate>Mon, 01 Apr 2019 13:00:00 +0200</pubDate>
+        <link>/posts/2019/04/01/rethinking-inotify.html</link>
+        <guid isPermaLink="true">http://localhost:4000/posts/2019/04/01/rethinking-inotify.html</guid>
+      </item>
+    
+      <item>
+        <title>Searching systematically for PHP disable_functions bypasses</title>
+        
+          <description>Some ideas about how to extract hidden parameters in PHP functions and how to find potential bypasses</description>
+        
+        <pubDate>Sun, 09 Dec 2018 14:00:00 +0100</pubDate>
+        <link>/posts/2018/12/09/find-bypass-disable_functions.html</link>
+        <guid isPermaLink="true">http://localhost:4000/posts/2018/12/09/find-bypass-disable_functions.html</guid>
+      </item>
+    
+      <item>
+        <title>Building simple DNS endpoints for exfiltration or C&amp;C</title>
+        
+          <description>Brief tutorial of how to use backend pipes in PowerDNS for exfiltration</description>
+        
+        <pubDate>Fri, 09 Nov 2018 16:00:00 +0100</pubDate>
+        <link>/posts/2018/11/09/DNS-endpoint-exfiltration.html</link>
+        <guid isPermaLink="true">http://localhost:4000/posts/2018/11/09/DNS-endpoint-exfiltration.html</guid>
+      </item>
+    
+      <item>
+        <title>Writeup Navaja Negra 2018 CTF</title>
+        
+          <description>Solutions to the challenges made by me in Navaja Negra CTF (Web, Pwn, Rev. &amp; Misc.)</description>
+        
+        <pubDate>Thu, 11 Oct 2018 14:00:00 +0200</pubDate>
+        <link>/posts/2018/10/11/nn8ed-CTF.html</link>
+        <guid isPermaLink="true">http://localhost:4000/posts/2018/10/11/nn8ed-CTF.html</guid>
+      </item>
+    
+      <item>
+        <title>Vulnerability in Swoole PHP extension [CVE-2018-15503]</title>
+        
+          <description>Description of how the vulnerability was found and a few indications about its explotability</description>
+        
+        <pubDate>Tue, 14 Aug 2018 15:11:37 +0200</pubDate>
+        <link>/posts/2018/08/14/swoole-deserialization-cve-2018-15503.html</link>
+        <guid isPermaLink="true">http://localhost:4000/posts/2018/08/14/swoole-deserialization-cve-2018-15503.html</guid>
+      </item>
+    
+      <item>
+        <title>Improving PHP extensions as a persistence method</title>
+        
+          <description>Article about how to build backdoors for the Zend Engine.</description>
+        
+        <pubDate>Sat, 28 Jul 2018 14:00:10 +0200</pubDate>
+        <link>/posts/2018/07/28/PHP-extension-backdoor.html</link>
+        <guid isPermaLink="true">http://localhost:4000/posts/2018/07/28/PHP-extension-backdoor.html</guid>
+      </item>
+    
+      <item>
+        <title>Hacking a game to learn FRIDA basics (Pwn Adventure 3)</title>
+        
+          <description>Learn the basic usage of Frida with this tutorial. Build your own cheat with Frida.</description>
+        
+        <pubDate>Thu, 05 Jul 2018 15:00:37 +0200</pubDate>
+        <link>/posts/2018/07/05/Frida-Pwn-Adventure-3.html</link>
+        <guid isPermaLink="true">http://localhost:4000/posts/2018/07/05/Frida-Pwn-Adventure-3.html</guid>
+      </item>
+    
+      <item>
+        <title>Exfiltrating credentials via PAM backdoors &amp; DNS requests</title>
+        
+          <description>Description of how to backdoor PAM and exfiltrate credentials via DNS requests. Capture credentials FTW!</description>
+        
+        <pubDate>Wed, 27 Jun 2018 15:37:00 +0200</pubDate>
+        <link>/posts/2018/06/27/PAM-backdoor-DNS.html</link>
+        <guid isPermaLink="true">http://localhost:4000/posts/2018/06/27/PAM-backdoor-DNS.html</guid>
+      </item>
+    
+      <item>
+        <title>Beyond pty.spawn - use pseudoterminals in your reverse shells (DNScat2 example)</title>
+        
+          <description>Quick article about how to improve well-known tools used in pentests. Forkpty() FTW!!</description>
+        
+        <pubDate>Tue, 08 May 2018 14:00:00 +0200</pubDate>
+        <link>/posts/2018/05/08/forkpty-dnscat2.html</link>
+        <guid isPermaLink="true">http://localhost:4000/posts/2018/05/08/forkpty-dnscat2.html</guid>
+      </item>
+    
+      <item>
+        <title>Defeating WordPress Security Plugins (Revisited)</title>
+        
+          <description>Article about how to subvert file integrity checks made by most popular WordPress Plugins</description>
+        
+        <pubDate>Fri, 09 Mar 2018 13:00:00 +0100</pubDate>
+        <link>/posts/2018/03/09/bypass-wordpress-plugins.html</link>
+        <guid isPermaLink="true">http://localhost:4000/posts/2018/03/09/bypass-wordpress-plugins.html</guid>
+      </item>
+    
+      <item>
+        <title>Parasiting web server process with webshells in permissive environments</title>
+        
+          <description>Example of how to abuse permissive environments to infect processes with custom code using ptrace</description>
+        
+        <pubDate>Sat, 24 Feb 2018 13:00:00 +0100</pubDate>
+        <link>/posts/2018/02/24/parasite-web-server-process.html</link>
+        <guid isPermaLink="true">http://localhost:4000/posts/2018/02/24/parasite-web-server-process.html</guid>
+      </item>
+    
+      <item>
+        <title>JavaScript AntiDebugging Tricks</title>
+        
+          <description>List of antidebugging techniques applied to JavaScript (focused on browsers)</description>
+        
+        <pubDate>Thu, 08 Feb 2018 13:00:00 +0100</pubDate>
+        <link>/posts/2018/02/08/javascript-antidebugging.html</link>
+        <guid isPermaLink="true">http://localhost:4000/posts/2018/02/08/javascript-antidebugging.html</guid>
+      </item>
+    
+      <item>
+        <title>Writeup (CTF) - ImpelDown CodeGate PreQuals 2018 (MISC)</title>
+        
+          <description>Solution to an easy python jail challenge</description>
+        
+        <pubDate>Sat, 03 Feb 2018 11:00:00 +0100</pubDate>
+        <link>/posts/2018/02/03/impeldown-python-jail.html</link>
+        <guid isPermaLink="true">http://localhost:4000/posts/2018/02/03/impeldown-python-jail.html</guid>
+      </item>
+    
+      <item>
+        <title>Loading &quot;fileless&quot; Shared Objects (memfd_create + dlopen)</title>
+        
+          <description>An example of how to drop modules on a target using the syscall  memfd_create</description>
+        
+        <pubDate>Fri, 02 Feb 2018 13:00:00 +0100</pubDate>
+        <link>/posts/2018/02/02/fileless-memfd_create.html</link>
+        <guid isPermaLink="true">http://localhost:4000/posts/2018/02/02/fileless-memfd_create.html</guid>
+      </item>
+    
+  </channel>
+</rss>

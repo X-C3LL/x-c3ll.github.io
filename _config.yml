@@ -1,32 +1,9 @@
-# Site specific settings
-title: "DoomsDay Vault"
-name: "DoomsDay Vault"
-keywords: "RedTeam, Hacking, Infosec, pentest, security"
-baseurl: ""
-url: "https://x-c3ll.github.io/"
-description: "Just a blog  to preserve some thoughts about Red Teaming :)"
-cover: "/assets/img/cover.svg"
-fanpage_id: ""
-
-# Site general settings
-lang: "en"
-ssl: false # It will redirect to http
-
-# Media
-# Just the shortname:
-# facebook: lampiaosec # Rigth
-# facebook: facebook.com/lampiaosec #  Wrong
-
-
-twitter: TheXC3LL
-facebook: 
-github: 
-google:
-
-# Build setting
-permalink: /:categories/:title/
-markdown: kramdown
-
-kramdown:
-  input: GFM
-  syntax_highlighter: rouge
+title: Doomsday Vault
+logo: /assets/img/logo.jpg
+description: X-C3LL's Personal Blog :)
+show_downloads: true
+google_analytics:
+theme: jekyll-theme-minimal
+remote_theme: pages-themes/minimal@v0.2.0
+plugins:
+- jekyll-remote-theme

