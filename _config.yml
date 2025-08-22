@@ -5,5 +5,7 @@ show_downloads: true
 google_analytics:
 theme: jekyll-theme-minimal
 remote_theme: pages-themes/minimal@v0.2.0
+permalink: /:categories/:title/
+keywords: "RedTeam, Hacking, Infosec, pentest, security"
 plugins:
 - jekyll-remote-theme
