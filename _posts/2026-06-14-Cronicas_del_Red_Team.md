@@ -11,7 +11,7 @@ authors:
 ---
 
 
-_(I wrote a book in Spanish, so this post will be in Spanish. You can use any translator from Spanish to English if you don't want to miss it. Or just use it to test your Duolingo skills)_
+_(I wrote a book in Spanish, so this post will be in Spanish. You can use any translator from Spanish to English if you don't want to miss the post. Or just use this post to test your Duolingo skills)_
 
 Hace diez años me mudé a Galicia para trabajar en un Red Team. El tiempo vuela, y de un pestañeo me doy cuenta que ya ha pasado una década. Diez años en los que he estado dedicado única y exclusivamente a hacer ejercicios de Red Team. He tocado todos los palos: estuve en primera línea de batalla siendo operador; después caté el amargor de los puestos de leader y manager; y por último retorné a ser un tranquilo operador que sólo tiene que preocuparse de sus propios proyectos. 
 
