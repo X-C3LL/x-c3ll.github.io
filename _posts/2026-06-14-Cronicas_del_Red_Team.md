@@ -27,7 +27,7 @@ Honestamente, creo que es café para los muy cafeteros y este tipo de contenido 
 
 Dejo debajo un extracto del libro para mostrar por donde van los tiros:
 
-``` 
+----
 (...)
 Los EDR, si bien suponían un grandísimo avance en la detección y telemetría, aun estaban en un estadio demasiado temprano y todavía no usaban kernel callbacks ni otros métodos más avanzados de detección. Prácticamente, en términos de volcado de memoria, únicamente hookeaban las funciones relacionadas con la generación de minidumps. En general esto era fácilmente evadible haciendo unhooking de los parches que se añadían para rastrear las llamadas o haciendo direct syscalling. En nuestro caso, optamos por la segunda opción y modificamos una prueba de concepto pública para convertirla en una DLL.
 
@@ -40,7 +40,7 @@ El keylogger era bastante elegante. En vez de usar las funciones más típicas, 
 A los pocos días cazamos las credenciales de una cuenta "adm" y con ello nuestro primer objetivo estaba cumplido.
 (...)
 
-```
+----
 
 
 
