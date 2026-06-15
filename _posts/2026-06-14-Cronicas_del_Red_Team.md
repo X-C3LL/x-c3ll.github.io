@@ -19,7 +19,7 @@ En los últimos años hablando con amigos y ex-compañeros de curro surgió el t
 
 Así que eso es __Crónicas del Red Team__. Una recopilación de unas cuantas operaciones de Red Team, anonimizadas, que relato con ciertos tintes autobiográficos para contextualizarlas. La mayoría de capítulos pertenecen a etapas cronológicas diferentes y distribuidas aleatoriamente, por lo que puede leerse sin seguir ningún orden. 
 
-<img src="/assets/img/book.jpg" alt="Crónicas del Red Team" />
+<img src="/assets/img/Book.jpg" alt="Crónicas del Red Team" />
 
 En este libro no se habla de qué es un Red Team, ni se cuentan Técnicas o Tácticas novedosas (todo lo que aparece está ya quemado y no se usa en la actualidad). No se abordan claves organizativas ni cómo saltarte un EDR en 2026. No. Este libro es una simple recopilación de operaciones pasadas, donde efectivamente se explican cuestiones técnicas pero no es ni mucho menos el núcleo. Puede servir para ver cómo los TTPs han ido evolucionando durante esta década, cómo la cosas eran antes y cómo han ido cambiando con los años. Una dendrocronología donde lo que prima es contar cómo se hacían las cosas en el contexto en el que se ejecutó cada operación. 
 
